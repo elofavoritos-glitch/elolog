@@ -156,24 +156,27 @@ body {
 .panel-body { padding: 22px; }
 .panel-body.split {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 28px;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 24px;
   align-items: start;
 }
+.panel-body.split > * { min-width: 0; }
 .chart-wrap { position: relative; min-height: 340px; }
 .chart-wrap.wide { min-height: 360px; }
 .chart-wrap svg { display: block; width: 100%; height: 100%; }
 .mini-title { margin: 0 0 10px; font-size: 13.5px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; }
 
 /* Table */
-.table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table-wrap { overflow-x: auto; min-width: 0; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .data-table th, .data-table td {
-  padding: 11px 12px;
+  padding: 10px 8px;
   text-align: left;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
+.data-table th:last-child, .data-table td:last-child { padding-right: 2px; }
+.data-table th:first-child, .data-table td:first-child { white-space: normal; }
 .data-table thead th {
   font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
   color: var(--text-soft); font-weight: 700;
@@ -557,10 +560,10 @@ const SERIE_MENSAL = GRUPOS.map((g) => {
   <script>
 // =====================================================================
 // charts.js — mini biblioteca de gráficos em SVG puro (100% offline).
-// Sem dependências, sem CDN. Suporta: barras agrupadas, barras horizontais,
-// linha, pizza/rosca e cascata (waterfall).
-// Todos os gráficos leem as cores do tema via CSS custom properties,
-// então funcionam em tema claro e escuro automaticamente.
+// Sem dependências, sem CDN. Tipos: barras agrupadas, barras horizontais,
+// linha com área, rosca/pizza e cascata (waterfall) com conectores.
+// Lê as cores do tema via CSS custom properties (claro/escuro automático).
+// Rótulos sem sobreposição, data labels nas barras e animação sutil.
 // =====================================================================
 (function (global) {
   const NS = "http://www.w3.org/2000/svg";
@@ -569,29 +572,29 @@ const SERIE_MENSAL = GRUPOS.map((g) => {
     for (const k in attrs) n.setAttribute(k, attrs[k]);
     return n;
   };
+  const txt = (node, s) => { node.textContent = s; return node; };
 
   function themeColor(varName, fallback) {
     const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
     return v || fallback;
   }
 
-  // paleta coerente com o CSS
   function palette() {
     return {
       text: themeColor("--chart-text", "#475569"),
+      textSoft: themeColor("--text-soft", "#64748b"),
       grid: themeColor("--chart-grid", "#e2e8f0"),
       axis: themeColor("--chart-axis", "#94a3b8"),
+      surface: themeColor("--surface", "#ffffff"),
       pos: themeColor("--pos", "#dc2626"),
       neg: themeColor("--neg", "#16a34a"),
       brand: themeColor("--brand", "#4f46e5"),
-      slate: "#94a3b8",
-      series: ["#4f46e5", "#06b6d4", "#f59e0b", "#8b5cf6", "#ec4899", "#10b981"],
+      slate: themeColor("--chart-axis", "#94a3b8"),
+      series: ["#6366f1", "#06b6d4", "#f59e0b", "#a855f7", "#ec4899", "#10b981"],
     };
   }
 
-  function clearHost(host) {
-    while (host.firstChild) host.removeChild(host.firstChild);
-  }
+  function clearHost(host) { while (host.firstChild) host.removeChild(host.firstChild); }
 
   // ---- Tooltip compartilhado ----
   let tipEl = null;
@@ -608,143 +611,160 @@ const SERIE_MENSAL = GRUPOS.map((g) => {
     const t = ensureTip();
     t.innerHTML = html;
     t.style.display = "block";
-    t.style.left = evt.pageX + 12 + "px";
-    t.style.top = evt.pageY + 12 + "px";
+    const pad = 14;
+    let x = evt.pageX + pad, y = evt.pageY + pad;
+    const w = t.offsetWidth, h = t.offsetHeight;
+    if (x + w > window.scrollX + document.documentElement.clientWidth) x = evt.pageX - w - pad;
+    if (y + h > window.scrollY + document.documentElement.clientHeight) y = evt.pageY - h - pad;
+    t.style.left = x + "px";
+    t.style.top = y + "px";
   }
   function hideTip() { if (tipEl) tipEl.style.display = "none"; }
-
-  function attachTip(node, html) {
-    node.addEventListener("mousemove", (e) => showTip(html, e));
-    node.addEventListener("mouseleave", hideTip);
-    node.style.cursor = "default";
+  function interactive(node, html) {
+    node.style.cursor = "pointer";
+    node.style.transition = "opacity .15s ease";
+    node.addEventListener("mousemove", (e) => { node.style.opacity = ".85"; showTip(html, e); });
+    node.addEventListener("mouseleave", () => { node.style.opacity = "1"; hideTip(); });
   }
 
   function makeSvg(host, w, h) {
     clearHost(host);
     const svg = el("svg", {
-      viewBox: `0 0 ${w} ${h}`,
-      width: "100%",
-      height: "100%",
-      preserveAspectRatio: "xMidYMid meet",
-      role: "img",
+      viewBox: `0 0 ${w} ${h}`, width: "100%", height: "100%",
+      preserveAspectRatio: "xMidYMid meet", role: "img",
+      "font-family": "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
     });
     host.appendChild(svg);
     return svg;
+  }
+
+  // animação sutil de "subida" das barras
+  function animateGrow(node, originY) {
+    node.style.transformBox = "fill-box";
+    node.style.transformOrigin = `center ${originY}`;
+    node.animate(
+      [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }],
+      { duration: 500, easing: "cubic-bezier(.22,1,.36,1)" }
+    );
   }
 
   function niceMax(v) {
     if (v <= 0) return 1;
     const mag = Math.pow(10, Math.floor(Math.log10(v)));
     const n = v / mag;
-    const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+    const step = n <= 1 ? 1 : n <= 1.5 ? 1.5 : n <= 2 ? 2 : n <= 3 ? 3 : n <= 5 ? 5 : 10;
     return step * mag;
   }
 
-  // =============================================================
-  // Barras agrupadas (vertical) — datasets: [{label,color,data[]}]
-  // =============================================================
-  function groupedBar(host, { labels, datasets, fmt, yTitle }) {
-    const p = palette();
-    const W = 640, H = 360, m = { t: 20, r: 16, b: 70, l: 64 };
-    const svg = makeSvg(host, W, H);
-    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  // mede largura aproximada de texto (sem DOM) p/ decidir rotação
+  const approxW = (s, size) => String(s).length * size * 0.58;
 
-    const allVals = datasets.flatMap((d) => d.data.filter((v) => v != null));
-    const max = niceMax(Math.max(1, ...allVals));
-    const y = (v) => m.t + ih - (v / max) * ih;
+  // desenha rótulo do eixo X: rotaciona se não couber
+  function xLabel(svg, p, str, cx, baseY, slotW) {
+    const size = 11;
+    if (approxW(str, size) <= slotW - 4) {
+      svg.appendChild(txt(el("text", { x: cx, y: baseY + 15, "text-anchor": "middle", "font-size": size, fill: p.text }), str));
+    } else {
+      // rotaciona ~28° a partir de um ponto logo abaixo do eixo
+      const px = cx, py = baseY + 14;
+      const t = el("text", { x: px, y: py, "text-anchor": "end", "font-size": 10.5, fill: p.text, transform: `rotate(-28 ${px} ${py})` });
+      svg.appendChild(txt(t, str));
+    }
+  }
 
-    // grid + eixo Y
+  function yAxis(svg, p, { x0, x1, yTop, yBot, max, fmt, title }) {
     const ticks = 5;
     for (let i = 0; i <= ticks; i++) {
       const val = (max / ticks) * i;
-      const yy = y(val);
-      svg.appendChild(el("line", { x1: m.l, y1: yy, x2: m.l + iw, y2: yy, stroke: p.grid, "stroke-width": 1 }));
-      const tx = el("text", { x: m.l - 8, y: yy + 4, "text-anchor": "end", "font-size": 11, fill: p.text });
-      tx.textContent = fmt ? fmt(val) : val;
-      svg.appendChild(tx);
+      const yy = yBot - (val / max) * (yBot - yTop);
+      svg.appendChild(el("line", { x1: x0, y1: yy, x2: x1, y2: yy, stroke: p.grid, "stroke-width": i === 0 ? 1.5 : 1 }));
+      svg.appendChild(txt(el("text", { x: x0 - 10, y: yy + 4, "text-anchor": "end", "font-size": 11, fill: p.textSoft }), fmt ? fmt(val) : val));
     }
-    if (yTitle) {
-      const t = el("text", { x: 14, y: m.t + ih / 2, "text-anchor": "middle", "font-size": 11, fill: p.text, transform: `rotate(-90 14 ${m.t + ih / 2})` });
-      t.textContent = yTitle;
-      svg.appendChild(t);
+    if (title) {
+      const my = (yTop + yBot) / 2;
+      svg.appendChild(txt(el("text", { x: 16, y: my, "text-anchor": "middle", "font-size": 11, fill: p.textSoft, transform: `rotate(-90 16 ${my})` }), title));
     }
+  }
 
-    const groupW = iw / labels.length;
+  function legend(svg, p, items, cx, y) {
+    const size = 12;
+    const gap = 22;
+    const widths = items.map((it) => 16 + approxW(it.label, size) + gap);
+    const total = widths.reduce((a, b) => a + b, 0) - gap;
+    let x = cx - total / 2;
+    items.forEach((it, i) => {
+      svg.appendChild(el("rect", { x, y: y - 10, width: 12, height: 12, rx: 3, fill: it.color }));
+      svg.appendChild(txt(el("text", { x: x + 17, y: y, "font-size": size, fill: p.text }), it.label));
+      x += widths[i];
+    });
+  }
+
+  // =============================================================
+  // Barras agrupadas (vertical) com data labels
+  // =============================================================
+  function groupedBar(host, { labels, datasets, fmt, yTitle }) {
+    const p = palette();
+    const W = 680, H = 410, m = { t: 44, r: 20, b: 92, l: 72 };
+    const svg = makeSvg(host, W, H);
+    const iw = W - m.l - m.r, yTop = m.t, yBot = H - m.b;
+
+    const allVals = datasets.flatMap((d) => d.data.filter((v) => v != null));
+    const max = niceMax(Math.max(1, ...allVals));
+    const y = (v) => yBot - (v / max) * (yBot - yTop);
+
+    yAxis(svg, p, { x0: m.l, x1: m.l + iw, yTop, yBot, max, fmt, title: yTitle });
+
+    const slot = iw / labels.length;
+    const nd = datasets.length;
+    const innerPad = slot * 0.18;
+    const barsW = slot - innerPad * 2;
     const barGap = 6;
-    const barW = (groupW - barGap * (datasets.length + 1)) / datasets.length;
+    const barW = (barsW - barGap * (nd - 1)) / nd;
 
     labels.forEach((lab, gi) => {
-      const gx = m.l + groupW * gi;
+      const gx = m.l + slot * gi + innerPad;
       datasets.forEach((ds, di) => {
         const v = ds.data[gi];
         if (v == null) return;
-        const bx = gx + barGap + di * (barW + barGap);
-        const by = y(v);
-        const bh = m.t + ih - by;
-        const rect = el("rect", { x: bx, y: by, width: Math.max(1, barW), height: Math.max(0, bh), rx: 4, fill: ds.color });
-        attachTip(rect, `<strong>${lab}</strong><br>${ds.label}: ${fmt ? fmt(v) : v}`);
+        const bx = gx + di * (barW + barGap);
+        const by = y(v), bh = yBot - by;
+        const rect = el("rect", { x: bx, y: by, width: Math.max(1, barW), height: Math.max(0, bh), rx: 5, fill: ds.color });
+        interactive(rect, `<strong>${lab}</strong><br>${ds.label}: ${fmt ? fmt(v) : v}`);
         svg.appendChild(rect);
+        animateGrow(rect, by + bh);
+        // data label
+        if (bh > 14) {
+          svg.appendChild(txt(el("text", { x: bx + barW / 2, y: by - 6, "text-anchor": "middle", "font-size": 10, "font-weight": 700, fill: ds.color }), fmt ? fmt(v) : v));
+        }
       });
-      const tx = el("text", { x: gx + groupW / 2, y: m.t + ih + 16, "text-anchor": "middle", "font-size": 10.5, fill: p.text });
-      wrapLabel(tx, lab, gx + groupW / 2, m.t + ih + 16);
-      svg.appendChild(tx);
+      xLabel(svg, p, lab, m.l + slot * gi + slot / 2, yBot, slot);
     });
 
-    legend(svg, datasets.map((d) => ({ label: d.label, color: d.color })), W, m.t - 4);
+    legend(svg, p, datasets.map((d) => ({ label: d.label, color: d.color })), W / 2, 24);
     return svg;
   }
 
-  // quebra rótulos longos em 2 linhas
-  function wrapLabel(textNode, str, x, y) {
-    const words = str.split(" ");
-    if (words.length <= 1 || str.length <= 11) { textNode.textContent = str; return; }
-    const mid = Math.ceil(words.length / 2);
-    const l1 = words.slice(0, mid).join(" ");
-    const l2 = words.slice(mid).join(" ");
-    const t1 = el("tspan", { x, dy: 0 }); t1.textContent = l1;
-    const t2 = el("tspan", { x, dy: 12 }); t2.textContent = l2;
-    textNode.appendChild(t1); textNode.appendChild(t2);
-  }
-
-  function legend(svg, items, W, y) {
-    const g = el("g");
-    const itemW = 120;
-    const totalW = items.length * itemW;
-    let x = (W - totalW) / 2;
-    items.forEach((it) => {
-      g.appendChild(el("rect", { x, y: y - 9, width: 11, height: 11, rx: 2, fill: it.color }));
-      const t = el("text", { x: x + 16, y: y, "font-size": 11, fill: palette().text });
-      t.textContent = it.label;
-      g.appendChild(t);
-      x += itemW;
-    });
-    svg.appendChild(g);
-  }
-
   // =============================================================
-  // Barras horizontais com cor por sinal (impacto / desvios)
-  // items: [{label, value, color?}]
+  // Barras horizontais divergentes (impacto) com valores
   // =============================================================
   function horizontalBar(host, { items, fmt, xTitle }) {
     const p = palette();
-    const W = 640, rowH = 34, m = { t: 16, r: 24, b: 40, l: 160 };
+    const W = 680, rowH = 42, m = { t: 20, r: 90, b: 46, l: 180 };
     const H = m.t + m.b + items.length * rowH;
     const svg = makeSvg(host, W, H);
     const iw = W - m.l - m.r;
 
     const maxAbs = niceMax(Math.max(1, ...items.map((i) => Math.abs(i.value))));
-    const zeroX = m.l + iw / 2;
-    const scale = (iw / 2) / maxAbs;
+    const temNeg = items.some((i) => i.value < 0);
+    const zeroX = temNeg ? m.l + iw / 2 : m.l;
+    const scale = temNeg ? (iw / 2) / maxAbs : iw / maxAbs;
 
-    // linha zero
-    svg.appendChild(el("line", { x1: zeroX, y1: m.t - 4, x2: zeroX, y2: m.t + items.length * rowH, stroke: p.axis, "stroke-width": 1.5 }));
-    // ticks laterais
-    [-maxAbs, -maxAbs / 2, maxAbs / 2, maxAbs].forEach((val) => {
+    // ticks verticais
+    const tickVals = temNeg ? [-maxAbs, -maxAbs / 2, 0, maxAbs / 2, maxAbs] : [0, maxAbs / 2, maxAbs];
+    tickVals.forEach((val) => {
       const xx = zeroX + val * scale;
-      svg.appendChild(el("line", { x1: xx, y1: m.t - 4, x2: xx, y2: m.t + items.length * rowH, stroke: p.grid, "stroke-width": 1 }));
-      const t = el("text", { x: xx, y: m.t + items.length * rowH + 16, "text-anchor": "middle", "font-size": 10, fill: p.text });
-      t.textContent = fmt ? fmt(val) : val;
-      svg.appendChild(t);
+      svg.appendChild(el("line", { x1: xx, y1: m.t - 6, x2: xx, y2: m.t + items.length * rowH, stroke: val === 0 ? p.axis : p.grid, "stroke-width": val === 0 ? 1.5 : 1 }));
+      svg.appendChild(txt(el("text", { x: xx, y: m.t + items.length * rowH + 18, "text-anchor": "middle", "font-size": 10, fill: p.textSoft }), fmt ? fmt(val) : val));
     });
 
     items.forEach((it, i) => {
@@ -752,86 +772,85 @@ const SERIE_MENSAL = GRUPOS.map((g) => {
       const w = Math.abs(it.value) * scale;
       const x = it.value >= 0 ? zeroX : zeroX - w;
       const color = it.color || (it.value > 0 ? p.pos : p.neg);
-      const rect = el("rect", { x, y: cy - 10, width: Math.max(1, w), height: 20, rx: 4, fill: color });
-      attachTip(rect, `<strong>${it.label}</strong><br>${fmt ? fmt(it.value) : it.value}`);
+      const rect = el("rect", { x, y: cy - 12, width: Math.max(2, w), height: 24, rx: 5, fill: color });
+      interactive(rect, `<strong>${it.label}</strong><br>${(it.value >= 0 ? "+" : "−")}${fmt ? fmt(Math.abs(it.value)) : Math.abs(it.value)}`);
       svg.appendChild(rect);
-      const lab = el("text", { x: m.l - 10, y: cy + 4, "text-anchor": "end", "font-size": 11.5, fill: p.text });
-      lab.textContent = it.label;
-      svg.appendChild(lab);
+      rect.animate([{ width: 0 }, { width: Math.max(2, w) }], { duration: 500, easing: "cubic-bezier(.22,1,.36,1)" });
+      // rótulo da linha
+      svg.appendChild(txt(el("text", { x: m.l - 12, y: cy + 4, "text-anchor": "end", "font-size": 12, fill: p.text }), it.label));
+      // valor na ponta
+      const vx = it.value >= 0 ? x + w + 6 : x - 6;
+      svg.appendChild(txt(el("text", { x: vx, y: cy + 4, "text-anchor": it.value >= 0 ? "start" : "end", "font-size": 11, "font-weight": 700, fill: color }),
+        `${it.value >= 0 ? "+" : "−"}${fmt ? fmt(Math.abs(it.value)) : Math.abs(it.value)}`));
     });
 
-    if (xTitle) {
-      const t = el("text", { x: W / 2, y: H - 6, "text-anchor": "middle", "font-size": 10.5, fill: p.text });
-      t.textContent = xTitle;
-      svg.appendChild(t);
-    }
+    if (xTitle) svg.appendChild(txt(el("text", { x: W / 2, y: H - 6, "text-anchor": "middle", "font-size": 10.5, fill: p.textSoft }), xTitle));
     return svg;
   }
 
   // =============================================================
-  // Linha (série temporal) — datasets: [{label,color,data[]}]
+  // Linha com área (série temporal)
   // =============================================================
   function line(host, { labels, datasets, fmt, yTitle }) {
     const p = palette();
-    const W = 640, H = 340, m = { t: 20, r: 18, b: 42, l: 64 };
+    const W = 920, H = 380, m = { t: 44, r: 24, b: 48, l: 72 };
     const svg = makeSvg(host, W, H);
-    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const iw = W - m.l - m.r, yTop = m.t, yBot = H - m.b;
 
     const allVals = datasets.flatMap((d) => d.data.filter((v) => v != null));
     const max = niceMax(Math.max(1, ...allVals));
-    const x = (i) => m.l + (iw / (labels.length - 1)) * i;
-    const y = (v) => m.t + ih - (v / max) * ih;
+    const n = labels.length;
+    const x = (i) => m.l + (n === 1 ? iw / 2 : (iw / (n - 1)) * i);
+    const y = (v) => yBot - (v / max) * (yBot - yTop);
 
-    const ticks = 5;
-    for (let i = 0; i <= ticks; i++) {
-      const val = (max / ticks) * i;
-      const yy = y(val);
-      svg.appendChild(el("line", { x1: m.l, y1: yy, x2: m.l + iw, y2: yy, stroke: p.grid, "stroke-width": 1 }));
-      const tx = el("text", { x: m.l - 8, y: yy + 4, "text-anchor": "end", "font-size": 11, fill: p.text });
-      tx.textContent = fmt ? fmt(val) : val;
-      svg.appendChild(tx);
-    }
-    labels.forEach((lab, i) => {
-      const tx = el("text", { x: x(i), y: m.t + ih + 16, "text-anchor": "middle", "font-size": 10.5, fill: p.text });
-      tx.textContent = lab;
-      svg.appendChild(tx);
-    });
-    if (yTitle) {
-      const t = el("text", { x: 14, y: m.t + ih / 2, "text-anchor": "middle", "font-size": 11, fill: p.text, transform: `rotate(-90 14 ${m.t + ih / 2})` });
-      t.textContent = yTitle;
-      svg.appendChild(t);
-    }
+    yAxis(svg, p, { x0: m.l, x1: m.l + iw, yTop, yBot, max, fmt, title: yTitle });
+    labels.forEach((lab, i) => svg.appendChild(txt(el("text", { x: x(i), y: yBot + 18, "text-anchor": "middle", "font-size": 11, fill: p.textSoft }), lab)));
 
     datasets.forEach((ds) => {
-      let d = "";
+      const pts = ds.data.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean);
+      if (pts.length === 0) return;
+      // área leve
+      if (pts.length > 1) {
+        let d = `M${pts[0][0]} ${yBot} `;
+        pts.forEach((pt) => (d += `L${pt[0]} ${pt[1]} `));
+        d += `L${pts[pts.length - 1][0]} ${yBot} Z`;
+        const area = el("path", { d, fill: ds.color, opacity: 0.08 });
+        svg.appendChild(area);
+      }
+      // linha
+      let dl = "";
+      pts.forEach((pt, i) => (dl += (i === 0 ? "M" : "L") + pt[0] + " " + pt[1] + " "));
+      const path = el("path", { d: dl, fill: "none", stroke: ds.color, "stroke-width": 2.5, "stroke-linejoin": "round", "stroke-linecap": "round" });
+      svg.appendChild(path);
+      if (path.getTotalLength) {
+        const len = path.getTotalLength();
+        path.style.strokeDasharray = len;
+        path.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 650, easing: "ease-out" });
+      }
+      // pontos
       ds.data.forEach((v, i) => {
         if (v == null) return;
-        d += (d === "" ? "M" : "L") + x(i) + " " + y(v) + " ";
-      });
-      svg.appendChild(el("path", { d, fill: "none", stroke: ds.color, "stroke-width": 2.5, "stroke-linejoin": "round" }));
-      ds.data.forEach((v, i) => {
-        if (v == null) return;
-        const c = el("circle", { cx: x(i), cy: y(v), r: 3.5, fill: ds.color });
-        attachTip(c, `<strong>${labels[i]}</strong><br>${ds.label}: ${fmt ? fmt(v) : v}`);
+        const c = el("circle", { cx: x(i), cy: y(v), r: 4, fill: p.surface, stroke: ds.color, "stroke-width": 2.5 });
+        interactive(c, `<strong>${labels[i]}</strong><br>${ds.label}: ${fmt ? fmt(v) : v}`);
         svg.appendChild(c);
       });
     });
 
-    legend(svg, datasets.map((d) => ({ label: d.label, color: d.color })), W, m.t - 4);
+    legend(svg, p, datasets.map((d) => ({ label: d.label, color: d.color })), W / 2, 24);
     return svg;
   }
 
   // =============================================================
-  // Rosca / Pizza — items: [{label, value}]
+  // Rosca / Pizza com legenda alinhada
   // =============================================================
   function donut(host, { items, fmt, donut: isDonut = true }) {
     const p = palette();
-    const W = 640, H = 340;
+    const W = 680, H = 360;
     const svg = makeSvg(host, W, H);
-    const cx = 180, cy = H / 2, R = 120, r = isDonut ? 64 : 0;
+    const cx = 170, cy = H / 2, R = 118, r = isDonut ? 66 : 0;
     const total = items.reduce((a, b) => a + b.value, 0);
-    let ang = -Math.PI / 2;
     const colors = p.series;
+    let ang = -Math.PI / 2;
 
     items.forEach((it, i) => {
       const frac = it.value / total;
@@ -848,100 +867,103 @@ const SERIE_MENSAL = GRUPOS.map((g) => {
         d = `M${cx} ${cy} L${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`;
       }
       const color = colors[i % colors.length];
-      const path = el("path", { d, fill: color, stroke: themeColor("--surface", "#fff"), "stroke-width": 2 });
-      const pct = ((frac) * 100).toFixed(1);
-      attachTip(path, `<strong>${it.label}</strong><br>${fmt ? fmt(it.value) : it.value} · ${pct}%`);
+      const path = el("path", { d, fill: color, stroke: p.surface, "stroke-width": 3 });
+      const pct = (frac * 100).toFixed(1);
+      interactive(path, `<strong>${it.label}</strong><br>${fmt ? fmt(it.value) : it.value} · ${pct}%`);
       svg.appendChild(path);
       ang = a2;
     });
+    // animação de giro
+    const first = svg.querySelector("path");
+    if (first) svg.querySelectorAll("path").forEach((pth) => pth.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, easing: "ease-out" }));
 
     if (isDonut) {
-      const t1 = el("text", { x: cx, y: cy - 4, "text-anchor": "middle", "font-size": 13, fill: p.text, "font-weight": 700 });
-      t1.textContent = "Total";
-      const t2 = el("text", { x: cx, y: cy + 16, "text-anchor": "middle", "font-size": 14, fill: p.text, "font-weight": 800 });
-      t2.textContent = fmt ? fmt(total) : total;
-      svg.appendChild(t1); svg.appendChild(t2);
+      svg.appendChild(txt(el("text", { x: cx, y: cy - 4, "text-anchor": "middle", "font-size": 12, fill: p.textSoft, "font-weight": 700 }), "Total"));
+      svg.appendChild(txt(el("text", { x: cx, y: cy + 16, "text-anchor": "middle", "font-size": 15, fill: p.text, "font-weight": 800 }), fmt ? fmt(total) : total));
     }
 
-    // legenda lateral
-    let ly = cy - items.length * 13;
+    // legenda com % e valor
+    const lx = 350;
+    const lineH = Math.min(30, (H - 40) / items.length);
+    let ly = cy - (items.length * lineH) / 2 + lineH / 2;
     items.forEach((it, i) => {
       const color = colors[i % colors.length];
-      svg.appendChild(el("rect", { x: 350, y: ly, width: 12, height: 12, rx: 2, fill: color }));
-      const t = el("text", { x: 368, y: ly + 11, "font-size": 12, fill: p.text });
       const pct = ((it.value / total) * 100).toFixed(1);
-      t.textContent = `${it.label} — ${pct}%`;
-      svg.appendChild(t);
-      ly += 26;
+      svg.appendChild(el("rect", { x: lx, y: ly - 9, width: 13, height: 13, rx: 3, fill: color }));
+      svg.appendChild(txt(el("text", { x: lx + 20, y: ly + 1, "font-size": 12.5, fill: p.text, "font-weight": 600 }), it.label));
+      svg.appendChild(txt(el("text", { x: W - 20, y: ly + 1, "text-anchor": "end", "font-size": 12, fill: p.textSoft }), `${pct}% · ${fmt ? fmt(it.value) : it.value}`));
+      ly += lineH;
     });
     return svg;
   }
 
   // =============================================================
-  // Cascata (waterfall) — do orçado ao realizado passando pelos desvios
+  // Cascata (waterfall) com conectores
   // steps: [{label, value, type:'start'|'end'|'delta'}]
   // =============================================================
   function waterfall(host, { steps, fmt, yTitle }) {
     const p = palette();
-    const W = 680, H = 380, m = { t: 24, r: 16, b: 76, l: 72 };
+    const W = 680, H = 440, m = { t: 44, r: 20, b: 108, l: 76 };
     const svg = makeSvg(host, W, H);
-    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const iw = W - m.l - m.r, yTop = m.t, yBot = H - m.b;
 
-    // calcula posições cumulativas
-    let running = 0;
+    let running = 0, maxTop = 0;
     const bars = [];
-    let maxTop = 0;
     steps.forEach((s) => {
-      if (s.type === "start") {
-        bars.push({ label: s.label, base: 0, top: s.value, value: s.value, kind: "total" });
-        running = s.value;
-      } else if (s.type === "end") {
-        bars.push({ label: s.label, base: 0, top: s.value, value: s.value, kind: "total" });
-      } else {
-        const base = running;
-        const top = running + s.value;
+      if (s.type === "start") { bars.push({ label: s.label, base: 0, top: s.value, value: s.value, kind: "total" }); running = s.value; }
+      else if (s.type === "end") { bars.push({ label: s.label, base: 0, top: s.value, value: s.value, kind: "total" }); }
+      else {
+        const base = running, top = running + s.value;
         bars.push({ label: s.label, base: Math.min(base, top), top: Math.max(base, top), value: s.value, kind: s.value >= 0 ? "up" : "down" });
         running = top;
       }
       maxTop = Math.max(maxTop, running, s.value || 0);
     });
     const max = niceMax(maxTop);
-    const y = (v) => m.t + ih - (v / max) * ih;
+    const y = (v) => yBot - (v / max) * (yBot - yTop);
 
-    const ticks = 5;
-    for (let i = 0; i <= ticks; i++) {
-      const val = (max / ticks) * i;
-      const yy = y(val);
-      svg.appendChild(el("line", { x1: m.l, y1: yy, x2: m.l + iw, y2: yy, stroke: p.grid, "stroke-width": 1 }));
-      const tx = el("text", { x: m.l - 8, y: yy + 4, "text-anchor": "end", "font-size": 11, fill: p.text });
-      tx.textContent = fmt ? fmt(val) : val;
-      svg.appendChild(tx);
-    }
-    if (yTitle) {
-      const t = el("text", { x: 16, y: m.t + ih / 2, "text-anchor": "middle", "font-size": 11, fill: p.text, transform: `rotate(-90 16 ${m.t + ih / 2})` });
-      t.textContent = yTitle;
-      svg.appendChild(t);
-    }
+    yAxis(svg, p, { x0: m.l, x1: m.l + iw, yTop, yBot, max, fmt, title: yTitle });
 
     const slot = iw / bars.length;
-    const bw = slot * 0.6;
-    bars.forEach((b, i) => {
-      const x = m.l + slot * i + (slot - bw) / 2;
-      const yTop = y(b.top), yBase = y(b.base);
-      const color = b.kind === "total" ? p.brand : b.kind === "up" ? p.pos : p.neg;
-      const rect = el("rect", { x, y: yTop, width: bw, height: Math.max(1, yBase - yTop), rx: 3, fill: color });
-      const signo = b.kind === "total" ? "" : (b.value >= 0 ? "+" : "−");
-      attachTip(rect, `<strong>${b.label}</strong><br>${signo}${fmt ? fmt(Math.abs(b.value)) : Math.abs(b.value)}`);
-      svg.appendChild(rect);
-      // conector
-      if (i < bars.length - 1 && b.kind !== "total") {
-        // nada
-      }
-      const tx = el("text", { x: m.l + slot * i + slot / 2, y: m.t + ih + 16, "text-anchor": "middle", "font-size": 10, fill: p.text });
-      wrapLabel(tx, b.label, m.l + slot * i + slot / 2, m.t + ih + 16);
-      svg.appendChild(tx);
+    const bw = slot * 0.56;
+    // nível acumulado ao final de cada barra (para os conectores)
+    let acc = 0;
+    const endLevels = bars.map((b) => {
+      if (b.kind === "total") { acc = b.top; return b.top; }
+      acc += b.value; return acc;
     });
 
+    bars.forEach((b, i) => {
+      const x = m.l + slot * i + (slot - bw) / 2;
+      const xRight = x + bw;
+      const yTopBar = y(b.top), yBase = y(b.base);
+      const color = b.kind === "total" ? p.brand : b.kind === "up" ? p.pos : p.neg;
+
+      // conector tracejado: do nível acumulado da barra anterior até a próxima
+      if (i < bars.length - 1) {
+        const yLevel = y(endLevels[i]);
+        const nextX = m.l + slot * (i + 1) + (slot - bw) / 2;
+        svg.appendChild(el("line", { x1: xRight, y1: yLevel, x2: nextX, y2: yLevel, stroke: p.axis, "stroke-width": 1.5, "stroke-dasharray": "4 3", opacity: .55 }));
+      }
+
+      const rect = el("rect", { x, y: yTopBar, width: bw, height: Math.max(2, yBase - yTopBar), rx: 4, fill: color });
+      const signo = b.kind === "total" ? "" : (b.value >= 0 ? "+" : "−");
+      interactive(rect, `<strong>${b.label}</strong><br>${signo}${fmt ? fmt(Math.abs(b.value)) : Math.abs(b.value)}`);
+      svg.appendChild(rect);
+      animateGrow(rect, b.kind === "total" ? yBase : (b.kind === "up" ? yBase : yTopBar));
+      // valor acima da barra
+      svg.appendChild(txt(el("text", { x: x + bw / 2, y: yTopBar - 7, "text-anchor": "middle", "font-size": 10, "font-weight": 700, fill: color }),
+        `${signo}${fmt ? fmt(Math.abs(b.value)) : Math.abs(b.value)}`));
+      // rótulo embaixo (rotacionado se longo)
+      xLabel(svg, p, b.label, m.l + slot * i + slot / 2, yBot, slot);
+    });
+
+    // legenda de cores
+    legend(svg, p, [
+      { label: "Total", color: p.brand },
+      { label: "Acima do orçado", color: p.pos },
+      { label: "Economia", color: p.neg },
+    ], W / 2, 24);
     return svg;
   }
 
