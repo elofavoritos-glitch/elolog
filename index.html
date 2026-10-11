@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Análise do Orçamento de TI · Set/26</title>
+  <meta name="description" content="Dashboard de análise do orçamento de TI — desvios por grupo e principais movimentos de pessoal (jan–set)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="brand-mark">TI</div>
+        <div>
+          <h1>Análise do Orçamento de TI</h1>
+          <p class="subtitle">Desvios por grupo e movimentos de pessoal · jan–set 2026</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnTheme" class="hbtn" type="button" aria-pressed="false" title="Alternar tema">
+          <span class="hbtn-icon" aria-hidden="true">🌙</span>
+          <span class="hbtn-label">Tema escuro</span>
+        </button>
+        <button id="btnPdf" class="hbtn" type="button" title="Exportar para PDF">
+          <span class="hbtn-icon" aria-hidden="true">⬇️</span>
+          <span class="hbtn-label">Exportar PDF</span>
+        </button>
+        <span class="header-badge">Atualizado em Set/26</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- KPIs -->
+    <section class="kpi-grid" aria-label="Indicadores-chave">
+      <article class="kpi-card">
+        <span class="kpi-label">Total Orçado</span>
+        <span class="kpi-value" id="kpi-orcado">—</span>
+        <span class="kpi-hint">Soma dos grupos com orçamento</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Total Realizado</span>
+        <span class="kpi-value" id="kpi-realizado">—</span>
+        <span class="kpi-hint">Executado no período</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Desvio Total</span>
+        <span class="kpi-value" id="kpi-desvio">—</span>
+        <span class="kpi-hint" id="kpi-desvio-pct">—</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Grupos em Atenção</span>
+        <span class="kpi-value" id="kpi-atencao">—</span>
+        <span class="kpi-hint">Acima do orçado</span>
+      </article>
+    </section>
+
+    <!-- Grupo 1: Desvios por grupo -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Desvios por grupo</h2>
+        <span class="panel-tag">jan–set</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap">
+          <canvas id="chartGrupos" aria-label="Gráfico orçado vs realizado por grupo" role="img"></canvas>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="tableGrupos">
+            <thead>
+              <tr>
+                <th>Grupo</th>
+                <th class="num">Orçado</th>
+                <th class="num">Realizado</th>
+                <th class="num">Desvio</th>
+                <th class="num">%</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Grupo 2: Movimentos de pessoal -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Principais movimentos de Pessoal</h2>
+        <span class="panel-tag">destaques</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap">
+          <canvas id="chartPessoal" aria-label="Gráfico de desvios por linha de pessoal" role="img"></canvas>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="tablePessoal">
+            <thead>
+              <tr>
+                <th>Linha</th>
+                <th class="num">Desvio</th>
+                <th class="num">Variação</th>
+                <th>Leitura</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Insights -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Leitura rápida</h2>
+      </div>
+      <div class="panel-body">
+        <ul class="insights" id="insights"></ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Fonte: planilha <em>análise-do-orçamento-de-ti-set-26</em>. Valores em R$ mil. Leitura: Favorável (abaixo do orçado), Atenção/Monitorar (acima), Pontual (evento não recorrente).</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
