@@ -1,269 +1,311 @@
-// ===== Helpers de formatação =====
-// Os dados em data.js estão em R$ mil; aqui convertemos para reais cheios.
-const brl = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-// v em R$ mil -> string em reais cheios (ex.: 509.3 -> "R$ 509.300,00")
-const fmtMil = (v) => {
-  if (v === null || v === undefined) return "—";
-  return brl.format(Math.abs(v) * 1000);
-};
+// =====================================================================
+// app.js — lógica do dashboard (100% offline).
+// Filtro por período, agregações, tabelas, gráficos (MiniChart), tema e PDF.
+// =====================================================================
+
+// ---------- Formatação (dados em R$ mil -> reais cheios) ----------
+const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const brlCompact = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 });
+const fmtMil = (v) => (v == null ? "—" : brl.format(Math.abs(v) * 1000));
+const fmtAxis = (vMil) => brlCompact.format(vMil * 1000);
 const fmtSigned = (v) => {
-  if (v === null || v === undefined) return "—";
-  const sign = v > 0 ? "+" : v < 0 ? "−" : "";
-  return `${sign}${fmtMil(Math.abs(v))}`;
+  if (v == null) return "—";
+  const s = v > 0 ? "+" : v < 0 ? "−" : "";
+  return `${s}${fmtMil(Math.abs(v))}`;
 };
-const fmtPct = (v) => {
-  if (v === null || v === undefined) return "n/a";
-  const sign = v > 0 ? "+" : v < 0 ? "−" : "";
-  return `${sign}${Math.abs(v)}%`;
-};
+const fmtPct = (v) => (v == null ? "n/a" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}%`);
 
-// ===== KPIs =====
-(function renderKPIs() {
-  const comOrcamento = GRUPOS.filter((g) => g.orcado !== null);
-  const totalOrcado = comOrcamento.reduce((s, g) => s + g.orcado, 0);
-  const totalRealizado = GRUPOS.reduce((s, g) => s + g.realizado, 0);
-  const desvio = totalRealizado - totalOrcado;
-  const pct = (desvio / totalOrcado) * 100;
-  const emAtencao = GRUPOS.filter((g) => g.desvio > 0).length;
+// ---------- Estado do filtro ----------
+let ini = 0, fim = MESES.length - 1; // índices inclusivos
 
-  document.getElementById("kpi-orcado").textContent = fmtMil(totalOrcado);
-  document.getElementById("kpi-realizado").textContent = fmtMil(totalRealizado);
+// soma um array mensal no intervalo [ini..fim], ignorando nulls; retorna null se todo nulo
+function somaIntervalo(arr) {
+  let soma = 0, temValor = false;
+  for (let i = ini; i <= fim; i++) {
+    if (arr[i] != null) { soma += arr[i]; temValor = true; }
+  }
+  return temValor ? Math.round(soma * 10) / 10 : null;
+}
 
-  const desvioEl = document.getElementById("kpi-desvio");
-  desvioEl.textContent = fmtSigned(desvio);
-  desvioEl.classList.add(desvio > 0 ? "val-pos" : "val-neg");
+// agrega os grupos conforme o período selecionado
+function gruposPeriodo() {
+  return SERIE_MENSAL.map((s) => {
+    const orcado = somaIntervalo(s.orcadoMensal);
+    const realizado = somaIntervalo(s.realizadoMensal);
+    const desvio = realizado == null ? null : (orcado == null ? realizado : Math.round((realizado - orcado) * 10) / 10);
+    const pct = orcado && orcado !== 0 ? Math.round((desvio / orcado) * 100) : null;
+    return { grupo: s.grupo, orcado, realizado, desvio, pct };
+  });
+}
 
-  document.getElementById("kpi-desvio-pct").textContent =
-    `${fmtPct(Math.round(pct))} vs. orçado`;
-  document.getElementById("kpi-atencao").textContent = `${emAtencao} de ${GRUPOS.length}`;
-})();
+// ---------- Setup do filtro ----------
+(function setupFilter() {
+  const selIni = document.getElementById("selIni");
+  const selFim = document.getElementById("selFim");
+  MESES.forEach((m, i) => {
+    selIni.appendChild(new Option(m, i));
+    selFim.appendChild(new Option(m, i));
+  });
+  selIni.value = 0;
+  selFim.value = MESES.length - 1;
 
-// ===== Tabela de grupos =====
-(function renderTableGrupos() {
-  const tbody = document.querySelector("#tableGrupos tbody");
-  GRUPOS.forEach((g) => {
-    const tr = document.createElement("tr");
-    const desvioCls = g.desvio > 0 ? "val-pos" : "val-neg";
-    tr.innerHTML = `
-      <td>${g.grupo}</td>
-      <td class="num">${g.orcado === null ? '<span class="muted">—</span>' : fmtMil(g.orcado)}</td>
-      <td class="num">${fmtMil(g.realizado)}</td>
-      <td class="num ${desvioCls}">${fmtSigned(g.desvio)}</td>
-      <td class="num ${g.pct === null ? "muted" : desvioCls}">${fmtPct(g.pct)}</td>
-    `;
-    tbody.appendChild(tr);
+  const onChange = () => {
+    let a = parseInt(selIni.value, 10), b = parseInt(selFim.value, 10);
+    if (a > b) { [a, b] = [b, a]; selIni.value = a; selFim.value = b; }
+    ini = a; fim = b;
+    markPreset();
+    renderAll();
+  };
+  selIni.addEventListener("change", onChange);
+  selFim.addEventListener("change", onChange);
+
+  // presets por trimestre
+  const presets = { all: [0, 8], q1: [0, 2], q2: [3, 5], q3: [6, 8] };
+  document.getElementById("presets").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-preset]");
+    if (!btn) return;
+    const [a, b] = presets[btn.dataset.preset];
+    ini = a; fim = b;
+    selIni.value = a; selFim.value = b;
+    markPreset();
+    renderAll();
   });
 
-  const comOrcamento = GRUPOS.filter((g) => g.orcado !== null);
-  const totO = comOrcamento.reduce((s, g) => s + g.orcado, 0);
-  const totR = GRUPOS.reduce((s, g) => s + g.realizado, 0);
-  const totD = totR - totO;
-  const tfoot = document.createElement("tfoot");
-  tfoot.innerHTML = `
-    <tr>
+  function markPreset() {
+    const map = { "0-8": "all", "0-2": "q1", "3-5": "q2", "6-8": "q3" };
+    const key = map[`${ini}-${fim}`];
+    document.querySelectorAll("#presets button").forEach((b) =>
+      b.classList.toggle("chip-active", b.dataset.preset === key));
+  }
+  window.__markPreset = markPreset;
+})();
+
+// ---------- Render principal (reexecuta a cada mudança de filtro) ----------
+function renderAll() {
+  const grupos = gruposPeriodo();
+  const periodoLabel = ini === fim ? MESES[ini] : `${MESES[ini]}–${MESES[fim]}`;
+  document.getElementById("tagPeriodo1").textContent = periodoLabel.toLowerCase();
+  document.getElementById("filterInfo").textContent = `${fim - ini + 1} ${fim - ini + 1 === 1 ? "mês" : "meses"} · ${periodoLabel}`;
+
+  renderKPIs(grupos);
+  renderTableGrupos(grupos);
+  renderChartGrupos(grupos);
+  renderWaterfall(grupos);
+  renderDonut(grupos);
+  renderLinha();
+  renderRanking(grupos);
+  renderInsights(grupos, periodoLabel);
+}
+
+// ---------- KPIs ----------
+function renderKPIs(grupos) {
+  const totO = grupos.reduce((s, g) => s + (g.orcado || 0), 0);
+  const totR = grupos.reduce((s, g) => s + (g.realizado || 0), 0);
+  const desvio = Math.round((totR - totO) * 10) / 10;
+  const pct = totO ? Math.round((desvio / totO) * 100) : 0;
+
+  document.getElementById("kpi-orcado").textContent = fmtMil(totO);
+  document.getElementById("kpi-realizado").textContent = fmtMil(totR);
+  const dEl = document.getElementById("kpi-desvio");
+  dEl.textContent = fmtSigned(desvio);
+  dEl.className = "kpi-value " + (desvio > 0 ? "val-pos" : "val-neg");
+  document.getElementById("kpi-desvio-pct").textContent = `${fmtPct(pct)} vs. orçado`;
+
+  // maior impacto absoluto
+  const top = grupos.slice().sort((a, b) => Math.abs(b.desvio || 0) - Math.abs(a.desvio || 0))[0];
+  const iEl = document.getElementById("kpi-impacto");
+  iEl.textContent = top ? top.grupo : "—";
+  iEl.className = "kpi-value";
+  document.getElementById("kpi-impacto-hint").textContent = top ? `${fmtSigned(top.desvio)} de desvio` : "";
+}
+
+// ---------- Tabela de grupos ----------
+function renderTableGrupos(grupos) {
+  const tbody = document.querySelector("#tableGrupos tbody");
+  tbody.innerHTML = "";
+  grupos.forEach((g) => {
+    const cls = (g.desvio || 0) > 0 ? "val-pos" : "val-neg";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${g.grupo}</td>
+      <td class="num">${g.orcado == null ? '<span class="muted">—</span>' : fmtMil(g.orcado)}</td>
+      <td class="num">${fmtMil(g.realizado)}</td>
+      <td class="num ${cls}">${fmtSigned(g.desvio)}</td>
+      <td class="num ${g.pct == null ? "muted" : cls}">${fmtPct(g.pct)}</td>`;
+    tbody.appendChild(tr);
+  });
+  const totO = grupos.reduce((s, g) => s + (g.orcado || 0), 0);
+  const totR = grupos.reduce((s, g) => s + (g.realizado || 0), 0);
+  const totD = Math.round((totR - totO) * 10) / 10;
+  let tfoot = document.querySelector("#tableGrupos tfoot");
+  if (tfoot) tfoot.remove();
+  tfoot = document.createElement("tfoot");
+  tfoot.innerHTML = `<tr>
       <td>Total</td>
       <td class="num">${fmtMil(totO)}</td>
       <td class="num">${fmtMil(totR)}</td>
       <td class="num ${totD > 0 ? "val-pos" : "val-neg"}">${fmtSigned(totD)}</td>
-      <td class="num ${totD > 0 ? "val-pos" : "val-neg"}">${fmtPct(Math.round((totD / totO) * 100))}</td>
+      <td class="num ${totD > 0 ? "val-pos" : "val-neg"}">${fmtPct(totO ? Math.round((totD / totO) * 100) : null)}</td>
     </tr>`;
   document.getElementById("tableGrupos").appendChild(tfoot);
-})();
+}
 
-// ===== Tabela de pessoal =====
-(function renderTablePessoal() {
-  const badgeMap = {
-    "Favorável": "badge-fav",
-    "Atenção": "badge-att",
-    "Monitorar": "badge-mon",
-    "Pontual?": "badge-pon",
-  };
+// ---------- Gráfico: barras agrupadas Orçado x Realizado ----------
+function renderChartGrupos(grupos) {
+  const p = MiniChart.palette();
+  MiniChart.groupedBar(document.getElementById("chartGrupos"), {
+    labels: grupos.map((g) => g.grupo),
+    datasets: [
+      { label: "Orçado", color: p.slate, data: grupos.map((g) => g.orcado) },
+      { label: "Realizado", color: p.brand, data: grupos.map((g) => g.realizado) },
+    ],
+    fmt: fmtAxis,
+    yTitle: "Valor (R$)",
+  });
+}
+
+// ---------- Gráfico: cascata (orçado -> desvios -> realizado) ----------
+function renderWaterfall(grupos) {
+  const totO = grupos.reduce((s, g) => s + (g.orcado || 0), 0);
+  const totR = grupos.reduce((s, g) => s + (g.realizado || 0), 0);
+  const steps = [{ label: "Orçado", value: totO, type: "start" }];
+  grupos.forEach((g) => {
+    if (g.desvio) steps.push({ label: g.grupo, value: g.desvio, type: "delta" });
+  });
+  steps.push({ label: "Realizado", value: totR, type: "end" });
+  MiniChart.waterfall(document.getElementById("chartWaterfall"), { steps, fmt: fmtAxis, yTitle: "Valor (R$)" });
+}
+
+// ---------- Gráfico: composição (rosca) ----------
+function renderDonut(grupos) {
+  const items = grupos
+    .filter((g) => (g.realizado || 0) > 0)
+    .map((g) => ({ label: g.grupo, value: g.realizado }))
+    .sort((a, b) => b.value - a.value);
+  MiniChart.donut(document.getElementById("chartDonut"), { items, fmt: fmtAxis, donut: true });
+}
+
+// ---------- Gráfico: linha (evolução mensal realizado) ----------
+function renderLinha() {
+  const p = MiniChart.palette();
+  const labels = MESES.slice(ini, fim + 1);
+  const datasets = SERIE_MENSAL.map((s, idx) => ({
+    label: s.grupo,
+    color: p.series[idx % p.series.length],
+    data: s.realizadoMensal.slice(ini, fim + 1),
+  }));
+  MiniChart.line(document.getElementById("chartLinha"), { labels, datasets, fmt: fmtAxis, yTitle: "Realizado (R$)" });
+}
+
+// ---------- Gráfico: ranking de impactos ----------
+function renderRanking(grupos) {
+  const p = MiniChart.palette();
+  const items = grupos
+    .filter((g) => g.desvio != null && g.desvio !== 0)
+    .map((g) => ({ label: g.grupo, value: g.desvio, color: g.desvio > 0 ? p.pos : p.neg }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  MiniChart.horizontalBar(document.getElementById("chartRanking"), {
+    items, fmt: fmtAxis, xTitle: "Desvio (R$) — vermelho acima do orçado · verde economia",
+  });
+}
+
+// ---------- Movimentos de pessoal (fixo: acumulado) ----------
+function renderPessoal() {
+  const p = MiniChart.palette();
+  // tabela
+  const badge = { "Favorável": "badge-fav", "Atenção": "badge-att", "Monitorar": "badge-mon", "Pontual?": "badge-pon" };
   const tbody = document.querySelector("#tablePessoal tbody");
-  PESSOAL.forEach((p) => {
+  tbody.innerHTML = "";
+  PESSOAL.forEach((x) => {
+    const cls = x.desvio > 0 ? "val-pos" : "val-neg";
     const tr = document.createElement("tr");
-    const desvioCls = p.desvio > 0 ? "val-pos" : "val-neg";
-    const badgeCls = badgeMap[p.leitura] || "badge-mon";
     tr.innerHTML = `
-      <td>${p.linha}</td>
-      <td class="num ${desvioCls}">${fmtSigned(p.desvio)}</td>
-      <td class="num ${p.variacao === null ? "muted" : desvioCls}">${p.variacao === null ? "sem orçamento" : fmtPct(p.variacao)}</td>
-      <td><span class="badge ${badgeCls}">${p.leitura}</span></td>
-    `;
+      <td>${x.linha}</td>
+      <td class="num ${cls}">${fmtSigned(x.desvio)}</td>
+      <td class="num ${x.variacao == null ? "muted" : cls}">${x.variacao == null ? "sem orçamento" : fmtPct(x.variacao)}</td>
+      <td><span class="badge ${badge[x.leitura] || "badge-mon"}">${x.leitura}</span></td>`;
     tbody.appendChild(tr);
   });
-})();
+  // gráfico
+  const items = PESSOAL
+    .map((x) => ({ label: x.linha, value: x.desvio, color: x.desvio > 0 ? p.pos : p.neg }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  MiniChart.horizontalBar(document.getElementById("chartPessoal"), {
+    items, fmt: fmtAxis, xTitle: "Desvio (R$) — verde economia · vermelho acima",
+  });
+}
 
-// ===== Gráficos =====
-const RED = "#dc2626";
-const GREEN = "#16a34a";
-const INDIGO = "#4f46e5";
-const SLATE = "#94a3b8";
-
-Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
-Chart.defaults.color = "#475569";
-
-// Formatador compacto para os eixos (valores em R$ mil -> reais cheios, abreviado)
-const brlCompact = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-const fmtAxis = (vMil) => brlCompact.format(vMil * 1000);
-
-// Orçado vs Realizado por grupo
-const chartGrupos = new Chart(document.getElementById("chartGrupos"), {
-  type: "bar",
-  data: {
-    labels: GRUPOS.map((g) => g.grupo),
-    datasets: [
-      {
-        label: "Orçado",
-        data: GRUPOS.map((g) => g.orcado),
-        backgroundColor: SLATE,
-        borderRadius: 6,
-      },
-      {
-        label: "Realizado",
-        data: GRUPOS.map((g) => g.realizado),
-        backgroundColor: INDIGO,
-        borderRadius: 6,
-      },
-    ],
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: "top" },
-      tooltip: {
-        callbacks: {
-          label: (ctx) => `${ctx.dataset.label}: ${fmtMil(ctx.parsed.y)}`,
-        },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { callback: (v) => fmtAxis(v) },
-        title: { display: true, text: "Valor (R$)" },
-      },
-      x: { ticks: { maxRotation: 35, minRotation: 0 } },
-    },
-  },
-});
-
-// Desvios de pessoal (barra horizontal, cor por sinal)
-const chartPessoal = new Chart(document.getElementById("chartPessoal"), {
-  type: "bar",
-  data: {
-    labels: PESSOAL.map((p) => p.linha),
-    datasets: [
-      {
-        label: "Desvio (R$)",
-        data: PESSOAL.map((p) => p.desvio),
-        backgroundColor: PESSOAL.map((p) => (p.desvio > 0 ? RED : GREEN)),
-        borderRadius: 6,
-      },
-    ],
-  },
-  options: {
-    indexAxis: "y",
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (ctx) => `Desvio: ${fmtSigned(ctx.parsed.x)}`,
-        },
-      },
-    },
-    scales: {
-      x: {
-        title: { display: true, text: "Valor (R$) — verde = economia, vermelho = acima" },
-        ticks: { callback: (v) => fmtAxis(v) },
-        grid: { color: (c) => (c.tick.value === 0 ? "#94a3b8" : "#e2e8f0") },
-      },
-    },
-  },
-});
-
-// ===== Insights =====
-(function renderInsights() {
-  const items = [
-    { cls: "warn", html: "<strong>Tecnologia</strong> estourou o orçado em <strong>+24%</strong> (+R$ 123.600,00) — maior pressão de gasto do período." },
-    { cls: "good", html: "<strong>Pessoal</strong> ficou <strong>−5%</strong> abaixo do orçado (−R$ 51.300,00), puxado pela queda de <strong>salários PJ (−36%)</strong>." },
-    { cls: "warn", html: "Dentro de Pessoal, há migração para CLT: <strong>Salários CLT +22%</strong>, <strong>INSS +44%</strong> e <strong>FGTS +50%</strong> sobem juntos." },
-    { cls: "warn", html: "<strong>Despesas administrativas</strong> subiram <strong>+61%</strong> e <strong>Viagens</strong> (R$ 40.500,00) surgiram sem orçamento previsto." },
-    { cls: "", html: "<strong>Rescisões</strong> de R$ 44.900,00 não tinham orçamento — avaliar se é evento pontual ou recorrente." },
-  ];
+// ---------- Insights ----------
+function renderInsights(grupos, periodoLabel) {
   const ul = document.getElementById("insights");
+  ul.innerHTML = "";
+  const items = [];
+
+  const comDesvio = grupos.filter((g) => g.desvio != null && g.desvio !== 0);
+  const maior = comDesvio.slice().sort((a, b) => Math.abs(b.desvio) - Math.abs(a.desvio))[0];
+  if (maior) {
+    const acima = maior.desvio > 0;
+    items.push({
+      cls: acima ? "warn" : "good",
+      html: `No período <strong>${periodoLabel}</strong>, o maior impacto é de <strong>${maior.grupo}</strong>: ${fmtSigned(maior.desvio)} ${acima ? "acima" : "abaixo"} do orçado${maior.pct != null ? ` (<strong>${fmtPct(maior.pct)}</strong>)` : ""}.`,
+    });
+  }
+  const pessoal = grupos.find((g) => g.grupo === "Pessoal");
+  if (pessoal && pessoal.desvio < 0) {
+    items.push({ cls: "good", html: `<strong>Pessoal</strong> segue favorável (${fmtSigned(pessoal.desvio)}), puxado pela queda de <strong>salários PJ (−36%)</strong> no acumulado.` });
+  }
+  const tec = grupos.find((g) => g.grupo === "Tecnologia");
+  if (tec && tec.desvio > 0) {
+    items.push({ cls: "warn", html: `<strong>Tecnologia</strong> é a principal pressão de gasto: ${fmtSigned(tec.desvio)}${tec.pct != null ? ` (${fmtPct(tec.pct)})` : ""}.` });
+  }
+  items.push({ cls: "warn", html: `Em Pessoal há migração para CLT: <strong>Salários CLT +22%</strong>, <strong>INSS +44%</strong> e <strong>FGTS +50%</strong> sobem juntos.` });
+  items.push({ cls: "", html: `<strong>Viagens</strong> e <strong>Rescisões</strong> surgiram sem orçamento previsto — avaliar se são eventos pontuais.` });
+
   items.forEach((i) => {
     const li = document.createElement("li");
     if (i.cls) li.classList.add(i.cls);
     li.innerHTML = i.html;
     ul.appendChild(li);
   });
-})();
+}
 
-// ===== Tema claro/escuro =====
+// ---------- Tema claro/escuro ----------
 (function themeToggle() {
   const btn = document.getElementById("btnTheme");
   const label = btn.querySelector(".hbtn-label");
   const icon = btn.querySelector(".hbtn-icon");
-  const charts = [chartGrupos, chartPessoal];
-
-  const applyChartTheme = (dark) => {
-    const tick = dark ? "#cbd5e1" : "#475569";
-    const grid = dark ? "rgba(148,163,184,.2)" : "#e2e8f0";
-    const zeroGrid = dark ? "#64748b" : "#94a3b8";
-    Chart.defaults.color = tick;
-    charts.forEach((c) => {
-      Object.values(c.options.scales || {}).forEach((sc) => {
-        if (sc.ticks) sc.ticks.color = tick;
-        if (sc.title) sc.title.color = tick;
-        if (sc.grid) {
-          sc.grid.color = (ctx) => (ctx.tick && ctx.tick.value === 0 ? zeroGrid : grid);
-        }
-      });
-      if (c.options.plugins && c.options.plugins.legend && c.options.plugins.legend.labels) {
-        c.options.plugins.legend.labels.color = tick;
-      }
-      c.update();
-    });
-  };
-
   const setTheme = (dark) => {
     document.documentElement.classList.toggle("dark", dark);
     btn.setAttribute("aria-pressed", String(dark));
     label.textContent = dark ? "Tema claro" : "Tema escuro";
     icon.textContent = dark ? "☀️" : "🌙";
     try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch (e) {}
-    applyChartTheme(dark);
+    // redesenha os gráficos para pegar as cores do tema
+    if (window.__ready) { renderAll(); renderPessoal(); }
   };
-
-  // Preferência salva ou do sistema
   let saved = null;
   try { saved = localStorage.getItem("theme"); } catch (e) {}
   const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  setTheme(saved ? saved === "dark" : prefersDark);
-
-  btn.addEventListener("click", () => {
-    setTheme(!document.documentElement.classList.contains("dark"));
-  });
+  btn.addEventListener("click", () => setTheme(!document.documentElement.classList.contains("dark")));
+  // aplica sem redesenhar ainda (os gráficos vêm no boot)
+  document.documentElement.classList.toggle("dark", saved ? saved === "dark" : prefersDark);
+  const dark = document.documentElement.classList.contains("dark");
+  btn.setAttribute("aria-pressed", String(dark));
+  label.textContent = dark ? "Tema claro" : "Tema escuro";
+  icon.textContent = dark ? "☀️" : "🌙";
 })();
 
-// ===== Exportar PDF =====
-(function pdfExport() {
-  const btn = document.getElementById("btnPdf");
-  btn.addEventListener("click", () => {
-    // Redimensiona os gráficos antes de imprimir para caber na página
-    window.print();
-  });
-})();
+// ---------- Exportar PDF ----------
+document.getElementById("btnPdf").addEventListener("click", () => window.print());
+
+// ---------- Boot ----------
+renderAll();
+renderPessoal();
+window.__ready = true;
+
+// redesenha ao redimensionar (SVG recalcula posições)
+let _rt;
+window.addEventListener("resize", () => {
+  clearTimeout(_rt);
+  _rt = setTimeout(() => { renderAll(); renderPessoal(); }, 150);
+});
