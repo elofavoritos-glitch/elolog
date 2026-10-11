@@ -1,20 +1,30 @@
 # Análise do Orçamento de TI · Set/26
 
-Dashboard estático (HTML + CSS + JS) com a análise do orçamento de TI do período **jan–set 2026**, gerado a partir da planilha `análise-do-orçamento-de-ti-set-26`.
+Dashboard **100% offline** (HTML + CSS + JS puro, sem dependências nem CDN) com a análise do orçamento de TI, gerado a partir da planilha `análise-do-orçamento-de-ti-set-26`.
 
 ## Recursos
 
-- **KPIs** — total orçado, total realizado, desvio total e grupos em atenção.
-- **Desvios por grupo** — gráfico Orçado × Realizado + tabela com total.
-- **Movimentos de Pessoal** — barras de desvio (verde = economia, vermelho = acima) + tabela com badges de leitura.
-- **Leitura rápida** — insights automáticos.
-- **Tema claro/escuro** — toggle no cabeçalho, com persistência (`localStorage`) e detecção da preferência do sistema.
-- **Exportar PDF** — botão no cabeçalho (usa a caixa de impressão do navegador → "Salvar como PDF"), com layout de impressão otimizado.
-- Valores exibidos em **reais cheios** (ex.: `R$ 509.300,00`).
+- **Filtro por período** — selecione mês inicial/final ou use os presets (Jan–Set, 1º/2º/3º tri). Todos os KPIs, tabelas e gráficos recalculam na hora.
+- **KPIs** — total orçado, total realizado, desvio total e **maior impacto** do período.
+- **Gráficos variados (SVG nativo):**
+  - **Barras agrupadas** — Orçado × Realizado por grupo.
+  - **Cascata (waterfall)** — do orçado ao realizado, passando pelos desvios de cada grupo.
+  - **Rosca (donut)** — composição do realizado.
+  - **Linha** — evolução mensal do realizado por grupo.
+  - **Ranking de impactos** — barras horizontais ordenadas pelo desvio (R$).
+  - **Movimentos de Pessoal** — barras horizontais por sinal + tabela com badges.
+- **Leitura rápida** — insights que se adaptam ao período filtrado.
+- **Tema claro/escuro** — toggle com persistência (`localStorage`) e detecção da preferência do sistema; os gráficos trocam de cor junto.
+- **Exportar PDF** — botão no cabeçalho (impressão do navegador) com folha de impressão otimizada.
+- Valores em **reais cheios** (ex.: `R$ 509.300,00`).
 
-## Como usar
+## 100% offline
 
-Abra o `index.html` em qualquer navegador. Os gráficos usam [Chart.js](https://www.chartjs.org/) via CDN.
+Não há `<script>`/`<link>` para CDNs. Os gráficos são desenhados por uma mini-biblioteca própria em **SVG** (`charts.js`). Basta abrir o `index.html` — funciona sem internet.
+
+## Observação sobre os dados mensais
+
+A planilha fornece apenas o **acumulado jan–set**. A série mensal (`SERIE_MENSAL` em `data.js`) é uma **distribuição estimada** desses totais ao longo dos 9 meses, com perfil de sazonalidade plausível; a soma de cada série **bate exatamente** com o acumulado da planilha. Isso habilita o filtro por período sem alterar os totais oficiais.
 
 ## Estrutura
 
@@ -22,7 +32,8 @@ Abra o `index.html` em qualquer navegador. Os gráficos usam [Chart.js](https://
 |---|---|
 | `index.html` | Estrutura da página |
 | `styles.css` | Estilos, tema escuro e folha de impressão |
-| `data.js` | Dados da planilha (valores em R$ mil) |
-| `app.js` | Formatação, tabelas, gráficos, tema e PDF |
+| `data.js` | Dados da planilha + série mensal (R$ mil) |
+| `charts.js` | Mini-biblioteca de gráficos em SVG (offline) |
+| `app.js` | Filtro, agregações, tabelas, gráficos, tema e PDF |
 
-> Fonte: planilha `análise-do-orçamento-de-ti-set-26`. Os dados em `data.js` estão em **R$ mil** e são convertidos para reais cheios na exibição.
+> Fonte: planilha `análise-do-orçamento-de-ti-set-26`. Dados em **R$ mil** convertidos para reais cheios na exibição.
