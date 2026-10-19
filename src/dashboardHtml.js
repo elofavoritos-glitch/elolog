@@ -255,11 +255,12 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
 <title>Foco do Dia · Trello</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #eef1f7; --bg2: #e4e9f2; --surface: #ffffff; --surface2: #f8fafc; --ink: #0f172a; --muted: #64748b;
     --line: #e9edf3; --azul: #4f46e5; --azul-2: #7c3aed; --radius: 18px;
+    --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
     --shadow: 0 1px 3px rgba(15,23,42,.05), 0 10px 30px -12px rgba(15,23,42,.12);
     --shadow-sm: 0 1px 2px rgba(15,23,42,.06);
     --shadow-hover: 0 14px 36px -12px rgba(79,70,229,.28);
@@ -292,14 +293,16 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
   header { padding: 30px 24px 0; max-width: 1280px; margin: 0 auto;
            display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .brand { display: flex; align-items: center; gap: 13px; }
-  .brand h1 { margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -.03em;
-              background: linear-gradient(120deg, var(--ink), color-mix(in srgb, var(--ink) 55%, var(--azul)));
+  .brand h1 { margin: 0; font-family: var(--serif); font-size: 30px; font-weight: 600; letter-spacing: -.01em;
+              background: linear-gradient(120deg, var(--ink), color-mix(in srgb, var(--ink) 50%, var(--azul)));
               -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-  .brand .logo { width: 46px; height: 46px; border-radius: 14px;
-                 background: linear-gradient(135deg, var(--azul), var(--azul-2));
-                 display: grid; place-items: center; font-size: 22px;
-                 box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--azul) 55%, transparent); }
-  .sub { color: var(--muted); font-size: 13px; margin: 9px 0 0 59px; font-weight: 500; }
+  .brand .logo-plate { display: inline-grid; place-items: center;
+                       background: linear-gradient(135deg, #0f3b5c, #15657f 55%, #0b2e49);
+                       border-radius: 14px; padding: 9px 14px; height: 56px;
+                       box-shadow: 0 8px 22px -8px rgba(11,46,73,.6); }
+  .brand .logo-plate--fallback { font-size: 24px; width: 56px; padding: 0; }
+  .brand .logo-img { height: 38px; width: auto; display: block; }
+  .sub { color: var(--muted); font-size: 13px; margin: 10px 0 0 0; font-weight: 500; }
   .toggle-tema { background: var(--surface); border: 1px solid var(--line); color: var(--ink);
                  border-radius: 12px; padding: 10px 15px; cursor: pointer; font-size: 14px;
                  font-weight: 600; box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 7px;
@@ -376,8 +379,8 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
   .painel { background: var(--surface); border-radius: var(--radius); padding: 22px 24px; box-shadow: var(--shadow);
             border: 1px solid var(--line); }
   .painel--producao { grid-column: 1 / -1; margin-top: 20px; }
-  .painel h2 { margin: 0 0 18px; font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 10px;
-               letter-spacing: -.02em; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .painel h2 { margin: 0 0 18px; font-family: var(--serif); font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 10px;
+               letter-spacing: -.01em; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
   .cont { background: var(--track); color: var(--muted); border-radius: 20px; padding: 2px 11px; font-size: 13px; font-weight: 700; }
   .cont--sm { font-size: 12px; padding: 1px 9px; }
   .painel--fazer h2 .cont { background: linear-gradient(135deg, var(--azul), var(--azul-2)); color: #fff; }
@@ -465,15 +468,65 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
 
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 28px; }
   footer a { color: var(--azul); font-weight: 600; }
+
+  /* ===================== RESPONSIVO / MOBILE ===================== */
+  @media (max-width: 680px) {
+    header { padding: 20px 16px 0; flex-wrap: wrap; }
+    .brand h1 { font-size: 23px; }
+    .brand .logo-img { height: 36px; }
+    .sub { margin-left: 0; margin-top: 10px; font-size: 12px; }
+    .toggle-tema { padding: 8px 12px; font-size: 13px; }
+    .toggle-tema .tt-label { display: none; }
+
+    main { padding: 18px 14px 40px; }
+
+    .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+    .kpi { padding: 14px 15px 12px; border-radius: 14px; }
+    .kpi-num { font-size: 26px; }
+    .kpi--hero .kpi-num { font-size: 30px; }
+    .kpi-icone { width: 30px; height: 30px; font-size: 14px; }
+    .kpi-label { font-size: 10.5px; margin-top: 8px; }
+
+    .controles { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; }
+    .ctrl select { min-width: 0; width: 100%; }
+    .ctrl-info { margin-left: 0; }
+
+    .grid, .dois-paineis { grid-template-columns: 1fr; gap: 14px; }
+    .painel { padding: 16px 16px; border-radius: 14px; }
+    .painel h2 { font-size: 17px; margin-bottom: 14px; padding-bottom: 11px; }
+    .alerta-cards, .cards--grid { grid-template-columns: 1fr; }
+
+    .aviso-filtro { flex-wrap: wrap; gap: 10px; }
+    .aviso-filtro button { margin-left: 0; width: 100%; }
+    .alerta-head { flex-direction: column; align-items: flex-start; }
+    .btn-copiar { width: 100%; }
+
+    .graf-linha { grid-template-columns: 96px 1fr 30px; gap: 8px; font-size: 12px; }
+    .card-nome { font-size: 13.5px; }
+  }
+  @media (max-width: 380px) {
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .brand h1 { font-size: 21px; }
+  }
+  /* Acessibilidade: respeita quem prefere menos animações */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
 </style>
 </head>
 <body>
   <header>
     <div>
-      <div class="brand"><div class="logo">🎯</div><h1>Foco do Dia</h1></div>
+      <div class="brand">
+        <span class="logo-plate">
+          <img class="logo-img" src="/logo-elo.svg" alt="ELO — Soluções Logísticas Integradas"
+               onerror="this.style.display='none';this.parentNode.classList.add('logo-plate--fallback');this.parentNode.textContent='🎯';" />
+        </span>
+        <h1>Foco do Dia</h1>
+      </div>
       <div class="sub">${me ? escapeHtml(me.fullName || me.username) + ' · ' : ''}${totalGeral} cards no total · atualizado ${geradoEm}</div>
     </div>
-    <button class="toggle-tema" id="toggleTema" aria-label="Alternar tema"><span id="temaIcone">🌙</span> <span id="temaTexto">Escuro</span></button>
+    <button class="toggle-tema" id="toggleTema" aria-label="Alternar tema"><span id="temaIcone">🌙</span> <span class="tt-label" id="temaTexto">Escuro</span></button>
   </header>
   <main>
     <div class="kpis">
