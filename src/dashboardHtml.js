@@ -76,9 +76,11 @@ function renderCardFoco(c, destaqueUrgente = false) {
   const nome = semTitulo(c) ? '<em class="sem-titulo">(sem título)</em>' : escapeHtml(c.name);
   // IDs de membros para o filtro por responsável (client-side).
   const idsMembros = (c.membros || []).map((m) => m.id).join(' ');
+  // Grupo efetivo do card (urgente vira 'urgente' mesmo quando no painel A Fazer).
+  const grupoCard = destaqueUrgente ? 'urgente' : (c.grupo || '');
   return `
     <a class="card${atrasado}" href="${escapeHtml(c.url)}" target="_blank" rel="noopener"
-       data-membros="${escapeHtml(idsMembros)}">
+       data-membros="${escapeHtml(idsMembros)}" data-grupo="${escapeHtml(grupoCard)}">
       ${flag}${renderLabels(c.labels)}
       <span class="card-nome">${nome}</span>
       <span class="card-meta">
@@ -96,11 +98,11 @@ function renderLinhaSimples(c) {
     <span class="simples-board">${escapeHtml(c.boardName)}</span>${prazo}</li>`;
 }
 
-function kpi(num, label, cor, icone, destaque = false) {
-  return `<div class="kpi${destaque ? ' kpi--hero' : ''}" style="--cor:${cor}">
+function kpi(num, label, cor, icone, grupo, destaque = false) {
+  return `<button type="button" class="kpi${destaque ? ' kpi--hero' : ''}" style="--cor:${cor}" data-filtro="${grupo}" title="Clique para filtrar por ${label}">
     <div class="kpi-top"><span class="kpi-icone">${icone}</span><span class="kpi-num">${num}</span></div>
     <div class="kpi-label">${label}</div>
-  </div>`;
+  </button>`;
 }
 
 // Barra de progresso de um projeto.
@@ -180,7 +182,7 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
     : '✅ Nenhuma tarefa atrasada!';
 
   const blocoAtraso = atrasados.length
-    ? `<section class="alerta">
+    ? `<section class="alerta" id="blocoAtraso">
          <div class="alerta-head">
            <span>⚠️ <strong>${atrasados.length}</strong> ${atrasados.length === 1 ? 'tarefa atrasada' : 'tarefas atrasadas'} — resolver primeiro</span>
            <button class="btn-copiar" id="btnCopiarAtraso" data-resumo="${escapeHtml(resumoAtrasoTexto)}">📋 Copiar resumo</button>
@@ -232,14 +234,14 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
       <div class="grafico">${renderGrafico(dist)}</div>
     </section>`;
 
-  const recolhivel = (emoji, titulo, arr) => arr.length
-    ? `<details class="recolhivel">
+  const recolhivel = (emoji, titulo, arr, grupo = '') => arr.length
+    ? `<details class="recolhivel"${grupo ? ` data-bloco data-grupos="${grupo}"` : ''}>
          <summary>${emoji} ${titulo} <span class="cont cont--sm">${arr.length}</span></summary>
          <ul class="lista-simples">${arr.map(renderLinhaSimples).join('')}</ul>
        </details>` : '';
 
   const blocoProducao = producao.length
-    ? `<section class="painel painel--producao">
+    ? `<section class="painel painel--producao" data-bloco data-grupos="producao">
          <h2>${GRUPOS.producao.emoji} Indo pra produção <span class="cont">${producao.length}</span></h2>
          <div class="cards cards--grid">${producao.map((c) => renderCardFoco(c)).join('')}</div>
        </section>`
@@ -292,14 +294,33 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
   @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 560px)  { .kpis { grid-template-columns: repeat(2, 1fr); } }
   .kpi { background: var(--surface); border-radius: var(--radius); padding: 18px 20px;
-         box-shadow: var(--shadow); position: relative; overflow: hidden; }
+         box-shadow: var(--shadow); position: relative; overflow: hidden;
+         border: 2px solid transparent; cursor: pointer; text-align: left; font-family: inherit;
+         transition: transform .1s, box-shadow .1s, border-color .1s; }
+  .kpi:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(16,24,40,.12); }
+  .kpi.ativo { border-color: var(--cor); box-shadow: 0 6px 20px color-mix(in srgb, var(--cor) 30%, transparent); }
+  .kpi.ativo::before { content: '✓ filtrando'; position: absolute; top: 8px; right: 10px;
+                       font-size: 9.5px; font-weight: 800; color: var(--cor); text-transform: uppercase; letter-spacing: .04em; }
   .kpi::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--cor); }
   .kpi-top { display: flex; align-items: center; justify-content: space-between; }
   .kpi-icone { font-size: 18px; opacity: .9; }
-  .kpi-num { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+  .kpi-num { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.02em; color: var(--ink); }
   .kpi-label { margin-top: 8px; font-size: 12px; color: var(--muted); font-weight: 600;
                text-transform: uppercase; letter-spacing: .04em; }
   .kpi--hero .kpi-num { font-size: 40px; color: var(--cor); }
+
+  /* Estado filtrado por KPI: esconde blocos/cards que não batem */
+  body.filtrando [data-bloco]:not(.bloco-visivel) { display: none; }
+  body.filtrando .bloco-grupo:not(.bloco-visivel) { display: none; }
+  body.filtrando #blocoAtraso { display: none; }
+  body.filtrando .dois-paineis { display: none; }
+  body.filtrando .secundaria > h2 { display: none; }
+  .aviso-filtro { display: none; align-items: center; gap: 12px; background: var(--surface);
+                  border-radius: var(--radius); padding: 12px 18px; margin-bottom: 20px; box-shadow: var(--shadow);
+                  font-size: 14px; font-weight: 600; }
+  body.filtrando .aviso-filtro { display: flex; }
+  .aviso-filtro button { margin-left: auto; background: var(--azul); color: #fff; border: none;
+                         border-radius: 9px; padding: 7px 14px; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 13px; }
 
   /* Controles (filtro + ordenação) */
   .controles { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 24px;
@@ -422,12 +443,12 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
   </header>
   <main>
     <div class="kpis">
-      ${kpi(totalFazer, 'A fazer', '#2563eb', '🔵', true)}
-      ${kpi(ideias.length, 'Ideias', '#06b6d4', '💡', true)}
-      ${kpi(andamento.length, 'Em andamento', '#f59e0b', '🟠')}
-      ${kpi(urgente.length, 'Urgente', '#ef4444', '🔴')}
-      ${kpi(producao.length, 'Produção', '#7c3aed', '🚀')}
-      ${kpi(finalizado.length, 'Finalizados', '#10b981', '✅')}
+      ${kpi(totalFazer, 'A fazer', '#2563eb', '🔵', 'fazer', true)}
+      ${kpi(ideias.length, 'Ideias', '#06b6d4', '💡', 'ideias', true)}
+      ${kpi(andamento.length, 'Em andamento', '#f59e0b', '🟠', 'andamento')}
+      ${kpi(urgente.length, 'Urgente', '#ef4444', '🔴', 'urgente')}
+      ${kpi(producao.length, 'Produção', '#7c3aed', '🚀', 'producao')}
+      ${kpi(finalizado.length, 'Finalizados', '#10b981', '✅', 'finalizado')}
     </div>
 
     <div class="controles">
@@ -451,20 +472,29 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
       <span class="ctrl-info" id="ctrlInfo"></span>
     </div>
 
+    <div class="aviso-filtro" id="avisoFiltro">
+      <span id="avisoFiltroTexto"></span>
+      <button type="button" id="limparFiltroKpi">✕ Limpar filtro</button>
+    </div>
+
     ${blocoAtraso}
 
     <div class="grid">
-      <section class="painel painel--fazer">
+      <section class="painel painel--fazer" data-bloco data-grupos="fazer urgente ideias">
         <h2>📋 O que fazer agora — por projeto <span class="cont">${totalFazer}</span></h2>
-        <div id="listaProjetos">${blocosFazerPorProjeto || '<p class="vazio">🎉 Nada pendente a fazer!</p>'}</div>
-        <div class="proj-head proj-head--ideias">💡 <span class="proj-nome">Ideias</span><span class="sub-cont">${ideias.length}</span></div>
-        <div class="cards">
-          ${ideias.map((c) => renderCardFoco(c)).join('')}
-          ${ideias.length === 0 ? '<p class="vazio">Sem ideias no backlog.</p>' : ''}
+        <div class="bloco-grupo" data-grupos="fazer urgente">
+          <div id="listaProjetos">${blocosFazerPorProjeto || '<p class="vazio">🎉 Nada pendente a fazer!</p>'}</div>
+        </div>
+        <div class="bloco-grupo" data-grupos="ideias">
+          <div class="proj-head proj-head--ideias">💡 <span class="proj-nome">Ideias</span><span class="sub-cont">${ideias.length}</span></div>
+          <div class="cards">
+            ${ideias.map((c) => renderCardFoco(c)).join('')}
+            ${ideias.length === 0 ? '<p class="vazio">Sem ideias no backlog.</p>' : ''}
+          </div>
         </div>
       </section>
 
-      <section class="painel painel--andamento">
+      <section class="painel painel--andamento" data-bloco data-grupos="andamento">
         <h2>🟠 Em andamento <span class="cont">${andamento.length}</span></h2>
         <div class="cards">
           ${andamento.map((c) => renderCardFoco(c)).join('')}
@@ -482,7 +512,7 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
 
     <div class="secundaria">
       <h2>Concluído &amp; arquivado</h2>
-      ${recolhivel('✅', 'Finalizados', finalizado)}
+      ${recolhivel('✅', 'Finalizados', finalizado, 'finalizado')}
       ${recolhivel(GRUPOS.pausado.emoji, 'Pausados', pausado)}
       ${recolhivel(GRUPOS.outros.emoji, 'Outros / Cancelados', outros)}
     </div>
@@ -567,6 +597,62 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
       }
 
       sel.addEventListener('change', ordenar);
+    })();
+
+    // Filtro por STATUS ao clicar nos KPIs
+    (function () {
+      const kpis = document.querySelectorAll('.kpi[data-filtro]');
+      const aviso = document.getElementById('avisoFiltroTexto');
+      const btnLimpar = document.getElementById('limparFiltroKpi');
+      if (!kpis.length) return;
+      let ativo = null;
+
+      function temGrupo(el, grupo) {
+        return (el.getAttribute('data-grupos') || '').split(' ').includes(grupo);
+      }
+
+      function aplicar(grupo) {
+        ativo = grupo;
+        kpis.forEach((k) => k.classList.toggle('ativo', k.dataset.filtro === grupo));
+        if (!grupo) {
+          document.body.classList.remove('filtrando');
+          document.querySelectorAll('.bloco-visivel').forEach((e) => e.classList.remove('bloco-visivel'));
+          // Reexibe cards/grupos (respeitando o filtro de responsável, se ativo).
+          document.querySelectorAll('.card.oculto').forEach((c) => c.classList.remove('oculto'));
+          document.querySelectorAll('.proj-grupo.oculto').forEach((p) => p.classList.remove('oculto'));
+          const fr = document.getElementById('filtroResp');
+          if (fr && fr.value) fr.dispatchEvent(new Event('change'));
+          return;
+        }
+        document.body.classList.add('filtrando');
+        // Marca blocos e sub-blocos que contêm o grupo.
+        document.querySelectorAll('[data-bloco]').forEach((b) => {
+          b.classList.toggle('bloco-visivel', temGrupo(b, grupo));
+        });
+        document.querySelectorAll('.bloco-grupo').forEach((b) => {
+          b.classList.toggle('bloco-visivel', temGrupo(b, grupo));
+        });
+        // Abre o recolhível de finalizados ao filtrar por ele.
+        document.querySelectorAll('details[data-bloco].bloco-visivel').forEach((d) => (d.open = true));
+        // Dentro dos blocos visíveis, esconde cards que não são do grupo.
+        document.querySelectorAll('.card').forEach((c) => {
+          c.classList.toggle('oculto', c.getAttribute('data-grupo') !== grupo);
+        });
+        // Esconde grupos de projeto que ficaram sem cards visíveis.
+        document.querySelectorAll('.proj-grupo').forEach((pg) => {
+          const algum = [...pg.querySelectorAll('.card')].some((c) => !c.classList.contains('oculto'));
+          pg.classList.toggle('oculto', !algum);
+        });
+        const label = [...kpis].find((k) => k.dataset.filtro === grupo).querySelector('.kpi-label').textContent;
+        aviso.textContent = '🔎 Mostrando apenas: ' + label;
+        document.querySelector('.aviso-filtro').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+
+      kpis.forEach((k) => k.addEventListener('click', () => {
+        const g = k.dataset.filtro;
+        aplicar(ativo === g ? null : g); // clicar de novo no ativo limpa
+      }));
+      btnLimpar.addEventListener('click', () => aplicar(null));
     })();
 
     // Copiar resumo de atrasados
