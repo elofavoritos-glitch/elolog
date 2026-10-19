@@ -271,7 +271,7 @@ export function gerarDashboardHtml({ boards, contagemGlobal, todosCards, me }) {
     </div>
     ${renderBoards(boards)}
   </main>
-  <footer>Gerado pelo agente Kiro · dados ao vivo da API do Trello</footer>
+  <footer>Gerado pelo agente Kiro · dados ao vivo da API do Trello · <a href="/orcamento" style="color:#889096">Orçamento de TI →</a></footer>
   <script>
     const botoes = document.querySelectorAll('.filtro-btn');
     const cards = document.querySelectorAll('.mini-card');

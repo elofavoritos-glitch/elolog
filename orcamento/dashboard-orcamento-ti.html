@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Análise do Orçamento de TI · Set/26</title>
+  <meta name="description" content="Dashboard de análise do orçamento de TI — desvios por grupo, impactos e movimentos de pessoal (jan–set)." />
+  <style>
+:root {
+  --bg: #0f172a;
+  --bg-soft: #1e293b;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-soft: #64748b;
+  --brand: #4f46e5;
+  --brand-soft: #eef2ff;
+  --pos: #dc2626;   /* desvio para cima (gasto maior) = alerta */
+  --neg: #16a34a;   /* desvio para baixo (economia) = bom */
+  --amber: #d97706;
+  --shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 8px 24px rgba(15, 23, 42, .06);
+  --radius: 16px;
+  --page-bg-top: #f1f5f9;
+  --page-bg-bottom: #e2e8f0;
+  --chart-text: #475569;
+  --chart-grid: #e2e8f0;
+  --chart-axis: #94a3b8;
+}
+
+/* Tema escuro */
+html.dark {
+  --surface: #1e293b;
+  --surface-2: #0f172a;
+  --border: #334155;
+  --text: #e2e8f0;
+  --text-soft: #94a3b8;
+  --brand: #818cf8;
+  --brand-soft: #312e81;
+  --pos: #f87171;
+  --neg: #4ade80;
+  --amber: #fbbf24;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+  --page-bg-top: #0b1120;
+  --page-bg-bottom: #020617;
+  --chart-text: #cbd5e1;
+  --chart-grid: rgba(148,163,184,.22);
+  --chart-axis: #64748b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: linear-gradient(180deg, var(--page-bg-top) 0%, var(--page-bg-bottom) 100%);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  transition: background .3s ease, color .3s ease;
+}
+
+.container {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Header */
+.site-header {
+  background: linear-gradient(120deg, #312e81 0%, #4f46e5 55%, #6366f1 100%);
+  color: #fff;
+  padding: 28px 0;
+  box-shadow: var(--shadow);
+}
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 16px; }
+.brand-mark {
+  width: 52px; height: 52px;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, .15);
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 14px;
+  font-weight: 800; font-size: 20px; letter-spacing: .5px;
+}
+.site-header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.subtitle { margin: 4px 0 0; font-size: 14px; color: rgba(255, 255, 255, .8); }
+.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.header-badge {
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .25);
+  padding: 8px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 600;
+}
+.hbtn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .3);
+  color: #fff;
+  padding: 8px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; font-family: inherit;
+  cursor: pointer;
+  transition: background .2s ease, transform .1s ease;
+}
+.hbtn:hover { background: rgba(255, 255, 255, .26); }
+.hbtn:active { transform: translateY(1px); }
+.hbtn-icon { font-size: 15px; line-height: 1; }
+
+/* KPIs */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin: 32px 0;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 6px;
+  box-shadow: var(--shadow);
+}
+.kpi-label { font-size: 13px; color: var(--text-soft); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.kpi-value { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.kpi-hint { font-size: 12.5px; color: var(--text-soft); }
+
+/* Panels */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.panel-header h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.panel-tag {
+  font-size: 12px; font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-soft);
+  padding: 5px 11px; border-radius: 999px;
+}
+.panel-body { padding: 22px; }
+.panel-body.split {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 24px;
+  align-items: start;
+}
+.panel-body.split > * { min-width: 0; }
+.chart-wrap { position: relative; min-height: 340px; }
+.chart-wrap.wide { min-height: 360px; }
+.chart-wrap svg { display: block; width: 100%; height: 100%; }
+.mini-title { margin: 0 0 10px; font-size: 13.5px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Table */
+.table-wrap { overflow-x: auto; min-width: 0; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.data-table th, .data-table td {
+  padding: 10px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.data-table th:last-child, .data-table td:last-child { padding-right: 2px; }
+.data-table th:first-child, .data-table td:first-child { white-space: normal; }
+.data-table thead th {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-soft); font-weight: 700;
+  background: var(--surface-2);
+}
+.data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table tbody tr:hover { background: var(--surface-2); }
+.data-table tfoot td { font-weight: 700; background: var(--surface-2); border-top: 2px solid var(--border); }
+
+.val-pos { color: var(--pos); font-weight: 600; }
+.val-neg { color: var(--neg); font-weight: 600; }
+.muted { color: var(--text-soft); }
+
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+.badge-fav { background: #dcfce7; color: #15803d; }
+.badge-att { background: #fef3c7; color: #b45309; }
+.badge-mon { background: #e0f2fe; color: #0369a1; }
+.badge-pon { background: #f3e8ff; color: #7e22ce; }
+
+/* Insights */
+.insights { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.insights li {
+  position: relative; padding: 14px 16px 14px 44px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 14px; line-height: 1.5;
+}
+.insights li::before {
+  content: ""; position: absolute; left: 16px; top: 18px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--brand);
+}
+.insights li.warn::before { background: var(--pos); }
+.insights li.good::before { background: var(--neg); }
+
+/* Barra de filtro */
+.filterbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 6px rgba(15,23,42,.04);
+  position: sticky; top: 0; z-index: 20;
+}
+.filterbar-inner {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 14px 24px;
+}
+.filter-group { display: flex; align-items: center; gap: 10px; }
+.filter-group label { font-size: 13px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; }
+.filter-sep { color: var(--text-soft); font-size: 13px; }
+.filterbar select {
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; cursor: pointer;
+}
+.filter-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-presets button, .chip {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--text-soft); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 14px; cursor: pointer; transition: all .15s ease;
+}
+.filter-presets button:hover { border-color: var(--brand); color: var(--brand); }
+.chip-active { background: var(--brand) !important; color: #fff !important; border-color: var(--brand) !important; }
+.filter-info { margin-left: auto; font-size: 13px; color: var(--text-soft); font-weight: 600; }
+
+/* Tooltip dos gráficos */
+.chart-tooltip {
+  position: absolute; z-index: 1000; pointer-events: none;
+  background: #0f172a; color: #fff;
+  border: 1px solid rgba(255,255,255,.12);
+  padding: 7px 11px; border-radius: 8px;
+  font-size: 12.5px; line-height: 1.45;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  max-width: 240px;
+}
+html.dark .chart-tooltip { background: #1e293b; }
+
+/* Footer */
+.site-footer {
+  padding: 28px 0 44px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .panel-body.split { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .site-header h1 { font-size: 20px; }
+}
+
+/* ===== Impressão / Exportar PDF ===== */
+@media print {
+  :root {
+    --page-bg-top: #ffffff;
+    --page-bg-bottom: #ffffff;
+  }
+  html.dark { /* força tema claro ao imprimir para economizar tinta e manter legibilidade */
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-soft: #64748b;
+    --page-bg-top: #ffffff;
+    --page-bg-bottom: #ffffff;
+  }
+  body { background: #fff; }
+  .header-actions .hbtn { display: none !important; }
+  .site-header {
+    background: #312e81 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .panel, .kpi-card {
+    box-shadow: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .panel-body.split { grid-template-columns: 1fr 1fr; }
+  .chart-wrap { min-height: 240px; }
+  .filterbar { position: static; box-shadow: none; }
+  .badge, .site-header, .brand-mark {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .panel svg { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 12mm; }
+}
+
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="brand-mark">TI</div>
+        <div>
+          <h1>Análise do Orçamento de TI</h1>
+          <p class="subtitle">Desvios, impactos e movimentos de pessoal · jan–set 2026</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnTheme" class="hbtn" type="button" aria-pressed="false" title="Alternar tema">
+          <span class="hbtn-icon" aria-hidden="true">🌙</span>
+          <span class="hbtn-label">Tema escuro</span>
+        </button>
+        <button id="btnPdf" class="hbtn" type="button" title="Exportar para PDF">
+          <span class="hbtn-icon" aria-hidden="true">⬇️</span>
+          <span class="hbtn-label">Exportar PDF</span>
+        </button>
+        <span class="header-badge">100% offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Barra de filtro de período -->
+  <div class="filterbar">
+    <div class="container filterbar-inner">
+      <div class="filter-group">
+        <label for="selIni">Período</label>
+        <select id="selIni" aria-label="Mês inicial"></select>
+        <span class="filter-sep">até</span>
+        <select id="selFim" aria-label="Mês final"></select>
+      </div>
+      <div class="filter-presets" id="presets">
+        <button type="button" data-preset="all" class="chip chip-active">Jan–Set</button>
+        <button type="button" data-preset="q1">1º tri</button>
+        <button type="button" data-preset="q2">2º tri</button>
+        <button type="button" data-preset="q3">3º tri</button>
+      </div>
+      <div class="filter-info" id="filterInfo"></div>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- KPIs -->
+    <section class="kpi-grid" aria-label="Indicadores-chave">
+      <article class="kpi-card">
+        <span class="kpi-label">Total Orçado</span>
+        <span class="kpi-value" id="kpi-orcado">—</span>
+        <span class="kpi-hint" id="kpi-orcado-hint">Período selecionado</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Total Realizado</span>
+        <span class="kpi-value" id="kpi-realizado">—</span>
+        <span class="kpi-hint">Executado no período</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Desvio Total</span>
+        <span class="kpi-value" id="kpi-desvio">—</span>
+        <span class="kpi-hint" id="kpi-desvio-pct">—</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Maior Impacto</span>
+        <span class="kpi-value" id="kpi-impacto">—</span>
+        <span class="kpi-hint" id="kpi-impacto-hint">Grupo que mais pesou</span>
+      </article>
+    </section>
+
+    <!-- Orçado x Realizado -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Orçado × Realizado por grupo</h2>
+        <span class="panel-tag" id="tagPeriodo1">jan–set</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap" id="chartGrupos"></div>
+        <div class="table-wrap">
+          <table class="data-table" id="tableGrupos">
+            <thead>
+              <tr>
+                <th>Grupo</th>
+                <th class="num">Orçado</th>
+                <th class="num">Realizado</th>
+                <th class="num">Desvio</th>
+                <th class="num">%</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Impactos: waterfall + composição -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Impacto no resultado</h2>
+        <span class="panel-tag">cascata de desvios</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap" id="chartWaterfall"></div>
+        <div>
+          <h3 class="mini-title">Composição do realizado</h3>
+          <div class="chart-wrap" id="chartDonut"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Evolução mensal -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Evolução mensal — Realizado</h2>
+        <span class="panel-tag">série temporal</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap wide" id="chartLinha"></div>
+      </div>
+    </section>
+
+    <!-- Ranking de impactos -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Ranking de impactos (desvio R$)</h2>
+        <span class="panel-tag">o que mais pesou</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap wide" id="chartRanking"></div>
+      </div>
+    </section>
+
+    <!-- Movimentos de pessoal -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Principais movimentos de Pessoal</h2>
+        <span class="panel-tag">acumulado jan–set</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap" id="chartPessoal"></div>
+        <div class="table-wrap">
+          <table class="data-table" id="tablePessoal">
+            <thead>
+              <tr>
+                <th>Linha</th>
+                <th class="num">Desvio</th>
+                <th class="num">Variação</th>
+                <th>Leitura</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Insights -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Leitura rápida</h2>
+      </div>
+      <div class="panel-body">
+        <ul class="insights" id="insights"></ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Fonte: planilha <em>análise-do-orçamento-de-ti-set-26</em>. Valores em reais; dados em R$ mil na origem. A série mensal é uma distribuição estimada do acumulado (soma bate com o total). Dashboard 100% offline — gráficos em SVG, sem dependências externas.</p>
+    </div>
+  </footer>
+  <script>
+// =====================================================================
+// Dados — planilha "análise-do-orçamento-de-ti-set-26"
+// Valores em R$ mil (milhares de reais). Convertidos para reais cheios
+// na exibição (ver app.js).
+// =====================================================================
+
+// --- Aba 1: Desvios por grupo (acumulado jan–set) ---
+const GRUPOS = [
+  { grupo: "Tecnologia",               orcado: 509.3,  realizado: 632.9, desvio: 123.6,  pct: 24 },
+  { grupo: "Despesas administrativas", orcado: 11.6,   realizado: 18.6,  desvio: 7.0,    pct: 61 },
+  { grupo: "Outras despesas",          orcado: null,   realizado: 3.5,   desvio: 3.5,    pct: null },
+  { grupo: "Viagens",                  orcado: null,   realizado: 40.5,  desvio: 40.5,   pct: null },
+  { grupo: "Pessoal",                  orcado: 1008.6, realizado: 957.3, desvio: -51.3,  pct: -5 },
+];
+
+// --- Aba 2: Principais movimentos de Pessoal (acumulado) ---
+const PESSOAL = [
+  { linha: "Salários de contratos PJ", desvio: -166.8, variacao: -36, leitura: "Favorável" },
+  { linha: "Salários CLT",             desvio: 49.4,   variacao: 22,  leitura: "Atenção" },
+  { linha: "INSS",                     desvio: 31.1,   variacao: 44,  leitura: "Atenção" },
+  { linha: "Férias",                   desvio: 14.0,   variacao: 54,  leitura: "Monitorar" },
+  { linha: "FGTS",                     desvio: 9.3,    variacao: 50,  leitura: "Monitorar" },
+  { linha: "Rescisões",                desvio: 44.9,   variacao: null, leitura: "Pontual?" },
+];
+
+const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set"];
+
+// --- Série mensal por grupo (orçado × realizado), em R$ mil ---
+// NOTA: a planilha fornece apenas o acumulado jan–set. A série mensal abaixo
+// é uma DISTRIBUIÇÃO dos totais ao longo dos 9 meses, com um perfil de sazonalidade
+// plausível, para habilitar o filtro por período. A soma de cada série
+// bate exatamente com o acumulado da Aba 1. (Dados mensais são estimados.)
+function _distribuir(total, pesos) {
+  if (total === null) return MESES.map(() => null);
+  const soma = pesos.reduce((a, b) => a + b, 0);
+  const bruto = pesos.map((p) => (total * p) / soma);
+  // arredonda para 1 casa e corrige a última posição p/ fechar o total
+  const arred = bruto.map((v) => Math.round(v * 10) / 10);
+  const diff = Math.round((total - arred.reduce((a, b) => a + b, 0)) * 10) / 10;
+  arred[arred.length - 1] = Math.round((arred[arred.length - 1] + diff) * 10) / 10;
+  return arred;
+}
+
+// perfis de peso por mês (jan..set)
+const _P = {
+  tecOrc:   [1, 1, 1, 1, 1, 1, 1, 1, 1],
+  tecReal:  [0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3],   // crescente (pressão de gasto)
+  admOrc:   [1, 1, 1, 1, 1, 1, 1, 1, 1],
+  admReal:  [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+  outReal:  [0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1.1, 1.3, 1.6],
+  viaReal:  [0, 0, 2, 1, 0, 3, 2, 4, 5],                          // concentrado (viagens pontuais)
+  pesOrc:   [1, 1, 1, 1, 1, 1, 1, 1, 1],
+  pesReal:  [1.08, 1.06, 1.04, 1.02, 1.0, 0.98, 0.96, 0.94, 0.92],// decrescente (economia)
+};
+
+const SERIE_MENSAL = GRUPOS.map((g) => {
+  const key = {
+    "Tecnologia": ["tecOrc", "tecReal"],
+    "Despesas administrativas": ["admOrc", "admReal"],
+    "Outras despesas": [null, "outReal"],
+    "Viagens": [null, "viaReal"],
+    "Pessoal": ["pesOrc", "pesReal"],
+  }[g.grupo];
+  return {
+    grupo: g.grupo,
+    orcadoMensal: key[0] ? _distribuir(g.orcado, _P[key[0]]) : MESES.map(() => null),
+    realizadoMensal: _distribuir(g.realizado, _P[key[1]]),
+  };
+});
+
+</script>
+  <script>
+// =====================================================================
+// charts.js — mini biblioteca de gráficos em SVG puro (100% offline).
+// Sem dependências, sem CDN. Tipos: barras agrupadas, barras horizontais,
+// linha com área, rosca/pizza e cascata (waterfall) com conectores.
+// Lê as cores do tema via CSS custom properties (claro/escuro automático).
+// Rótulos sem sobreposição, data labels nas barras e animação sutil.
+// =====================================================================
+(function (global) {
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (name, attrs = {}) => {
+    const n = document.createElementNS(NS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  };
+  const txt = (node, s) => { node.textContent = s; return node; };
+
+  function themeColor(varName, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    return v || fallback;
+  }
+
+  function palette() {
+    return {
+      text: themeColor("--chart-text", "#475569"),
+      textSoft: themeColor("--text-soft", "#64748b"),
+      grid: themeColor("--chart-grid", "#e2e8f0"),
+      axis: themeColor("--chart-axis", "#94a3b8"),
+      surface: themeColor("--surface", "#ffffff"),
+      pos: themeColor("--pos", "#dc2626"),
+      neg: themeColor("--neg", "#16a34a"),
+      brand: themeColor("--brand", "#4f46e5"),
+      slate: themeColor("--chart-axis", "#94a3b8"),
+      series: ["#6366f1", "#06b6d4", "#f59e0b", "#a855f7", "#ec4899", "#10b981"],
+    };
+  }
+
+  function clearHost(host) { while (host.firstChild) host.removeChild(host.firstChild); }
+
+  // ---- Tooltip compartilhado ----
+  let tipEl = null;
+  function ensureTip() {
+    if (!tipEl) {
+      tipEl = document.createElement("div");
+      tipEl.className = "chart-tooltip";
+      tipEl.style.display = "none";
+      document.body.appendChild(tipEl);
+    }
+    return tipEl;
+  }
+  function showTip(html, evt) {
+    const t = ensureTip();
+    t.innerHTML = html;
+    t.style.display = "block";
+    const pad = 14;
+    let x = evt.pageX + pad, y = evt.pageY + pad;
+    const w = t.offsetWidth, h = t.offsetHeight;
+    if (x + w > window.scrollX + document.documentElement.clientWidth) x = evt.pageX - w - pad;
+    if (y + h > window.scrollY + document.documentElement.clientHeight) y = evt.pageY - h - pad;
+    t.style.left = x + "px";
+    t.style.top = y + "px";
+  }
+  function hideTip() { if (tipEl) tipEl.style.display = "none"; }
+  function interactive(node, html) {
+    node.style.cursor = "pointer";
+    node.style.transition = "opacity .15s ease";
+    node.addEventListener("mousemove", (e) => { node.style.opacity = ".85"; showTip(html, e); });
+    node.addEventListener("mouseleave", () => { node.style.opacity = "1"; hideTip(); });
+  }
+
+  function makeSvg(host, w, h) {
+    clearHost(host);
+    const svg = el("svg", {
+      viewBox: `0 0 ${w} ${h}`, width: "100%", height: "100%",
+      preserveAspectRatio: "xMidYMid meet", role: "img",
+      "font-family": "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+    });
+    host.appendChild(svg);
+    return svg;
+  }
+
+  // animação sutil de "subida" das barras
+  function animateGrow(node, originY) {
+    node.style.transformBox = "fill-box";
+    node.style.transformOrigin = `center ${originY}`;
+    node.animate(
+      [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }],
+      { duration: 500, easing: "cubic-bezier(.22,1,.36,1)" }
+    );
+  }
+
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    const mag = Math.pow(10, Math.floor(Math.log10(v)));
+    const n = v / mag;
+    const step = n <= 1 ? 1 : n <= 1.5 ? 1.5 : n <= 2 ? 2 : n <= 3 ? 3 : n <= 5 ? 5 : 10;
+    return step * mag;
+  }
+
+  // mede largura aproximada de texto (sem DOM) p/ decidir rotação
+  const approxW = (s, size) => String(s).length * size * 0.58;
+
+  // desenha rótulo do eixo X: rotaciona se não couber
+  function xLabel(svg, p, str, cx, baseY, slotW) {
+    const size = 11;
+    if (approxW(str, size) <= slotW - 4) {
+      svg.appendChild(txt(el("text", { x: cx, y: baseY + 15, "text-anchor": "middle", "font-size": size, fill: p.text }), str));
+    } else {
+      // rotaciona ~28° a partir de um ponto logo abaixo do eixo
+      const px = cx, py = baseY + 14;
+      const t = el("text", { x: px, y: py, "text-anchor": "end", "font-size": 10.5, fill: p.text, transform: `rotate(-28 ${px} ${py})` });
+      svg.appendChild(txt(t, str));
+    }
+  }
+
+  function yAxis(svg, p, { x0, x1, yTop, yBot, max, fmt, title }) {
+    const ticks = 5;
+    for (let i = 0; i <= ticks; i++) {
+      const val = (max / ticks) * i;
+      const yy = yBot - (val / max) * (yBot - yTop);
+      svg.appendChild(el("line", { x1: x0, y1: yy, x2: x1, y2: yy, stroke: p.grid, "stroke-width": i === 0 ? 1.5 : 1 }));
+      svg.appendChild(txt(el("text", { x: x0 - 10, y: yy + 4, "text-anchor": "end", "font-size": 11, fill: p.textSoft }), fmt ? fmt(val) : val));
+    }
+    if (title) {
+      const my = (yTop + yBot) / 2;
+      svg.appendChild(txt(el("text", { x: 16, y: my, "text-anchor": "middle", "font-size": 11, fill: p.textSoft, transform: `rotate(-90 16 ${my})` }), title));
+    }
+  }
+
+  function legend(svg, p, items, cx, y) {
+    const size = 12;
+    const gap = 22;
+    const widths = items.map((it) => 16 + approxW(it.label, size) + gap);
+    const total = widths.reduce((a, b) => a + b, 0) - gap;
+    let x = cx - total / 2;
+    items.forEach((it, i) => {
+      svg.appendChild(el("rect", { x, y: y - 10, width: 12, height: 12, rx: 3, fill: it.color }));
+      svg.appendChild(txt(el("text", { x: x + 17, y: y, "font-size": size, fill: p.text }), it.label));
+      x += widths[i];
+    });
+  }
+
+  // =============================================================
+  // Barras agrupadas (vertical) com data labels
+  // =============================================================
+  function groupedBar(host, { labels, datasets, fmt, yTitle }) {
+    const p = palette();
+    const W = 680, H = 410, m = { t: 44, r: 20, b: 92, l: 72 };
+    const svg = makeSvg(host, W, H);
+    const iw = W - m.l - m.r, yTop = m.t, yBot = H - m.b;
+
+    const allVals = datasets.flatMap((d) => d.data.filter((v) => v != null));
+    const max = niceMax(Math.max(1, ...allVals));
+    const y = (v) => yBot - (v / max) * (yBot - yTop);
+
+    yAxis(svg, p, { x0: m.l, x1: m.l + iw, yTop, yBot, max, fmt, title: yTitle });
+
+    const slot = iw / labels.length;
+    const nd = datasets.length;
+    const innerPad = slot * 0.18;
+    const barsW = slot - innerPad * 2;
+    const barGap = 6;
+    const barW = (barsW - barGap * (nd - 1)) / nd;
+
+    labels.forEach((lab, gi) => {
+      const gx = m.l + slot * gi + innerPad;
+      datasets.forEach((ds, di) => {
+        const v = ds.data[gi];
+        if (v == null) return;
+        const bx = gx + di * (barW + barGap);
+        const by = y(v), bh = yBot - by;
+        const rect = el("rect", { x: bx, y: by, width: Math.max(1, barW), height: Math.max(0, bh), rx: 5, fill: ds.color });
+        interactive(rect, `<strong>${lab}</strong><br>${ds.label}: ${fmt ? fmt(v) : v}`);
+        svg.appendChild(rect);
+        animateGrow(rect, by + bh);
+        // data label
+        if (bh > 14) {
+          svg.appendChild(txt(el("text", { x: bx + barW / 2, y: by - 6, "text-anchor": "middle", "font-size": 10, "font-weight": 700, fill: ds.color }), fmt ? fmt(v) : v));
+        }
+      });
+      xLabel(svg, p, lab, m.l + slot * gi + slot / 2, yBot, slot);
+    });
+
+    legend(svg, p, datasets.map((d) => ({ label: d.label, color: d.color })), W / 2, 24);
+    return svg;
+  }
+
+  // =============================================================
+  // Barras horizontais divergentes (impacto) com valores
+  // =============================================================
+  function horizontalBar(host, { items, fmt, xTitle }) {
+    const p = palette();
+    const W = 680, rowH = 42, m = { t: 20, r: 90, b: 46, l: 180 };
+    const H = m.t + m.b + items.length * rowH;
+    const svg = makeSvg(host, W, H);
+    const iw = W - m.l - m.r;
+
+    const maxAbs = niceMax(Math.max(1, ...items.map((i) => Math.abs(i.value))));
+    const temNeg = items.some((i) => i.value < 0);
+    const zeroX = temNeg ? m.l + iw / 2 : m.l;
+    const scale = temNeg ? (iw / 2) / maxAbs : iw / maxAbs;
+
+    // ticks verticais
+    const tickVals = temNeg ? [-maxAbs, -maxAbs / 2, 0, maxAbs / 2, maxAbs] : [0, maxAbs / 2, maxAbs];
+    tickVals.forEach((val) => {
+      const xx = zeroX + val * scale;
+      svg.appendChild(el("line", { x1: xx, y1: m.t - 6, x2: xx, y2: m.t + items.length * rowH, stroke: val === 0 ? p.axis : p.grid, "stroke-width": val === 0 ? 1.5 : 1 }));
+      svg.appendChild(txt(el("text", { x: xx, y: m.t + items.length * rowH + 18, "text-anchor": "middle", "font-size": 10, fill: p.textSoft }), fmt ? fmt(val) : val));
+    });
+
+    items.forEach((it, i) => {
+      const cy = m.t + i * rowH + rowH / 2;
+      const w = Math.abs(it.value) * scale;
+      const x = it.value >= 0 ? zeroX : zeroX - w;
+      const color = it.color || (it.value > 0 ? p.pos : p.neg);
+      const rect = el("rect", { x, y: cy - 12, width: Math.max(2, w), height: 24, rx: 5, fill: color });
+      interactive(rect, `<strong>${it.label}</strong><br>${(it.value >= 0 ? "+" : "−")}${fmt ? fmt(Math.abs(it.value)) : Math.abs(it.value)}`);
+      svg.appendChild(rect);
+      rect.animate([{ width: 0 }, { width: Math.max(2, w) }], { duration: 500, easing: "cubic-bezier(.22,1,.36,1)" });
+      // rótulo da linha
+      svg.appendChild(txt(el("text", { x: m.l - 12, y: cy + 4, "text-anchor": "end", "font-size": 12, fill: p.text }), it.label));
+      // valor na ponta
+      const vx = it.value >= 0 ? x + w + 6 : x - 6;
+      svg.appendChild(txt(el("text", { x: vx, y: cy + 4, "text-anchor": it.value >= 0 ? "start" : "end", "font-size": 11, "font-weight": 700, fill: color }),
+        `${it.value >= 0 ? "+" : "−"}${fmt ? fmt(Math.abs(it.value)) : Math.abs(it.value)}`));
+    });
+
+    if (xTitle) svg.appendChild(txt(el("text", { x: W / 2, y: H - 6, "text-anchor": "middle", "font-size": 10.5, fill: p.textSoft }), xTitle));
+    return svg;
+  }
+
+  // =============================================================
+  // Linha com área (série temporal)
+  // =============================================================
+  function line(host, { labels, datasets, fmt, yTitle }) {
+    const p = palette();
+    const W = 920, H = 380, m = { t: 44, r: 24, b: 48, l: 72 };
+    const svg = makeSvg(host, W, H);
+    const iw = W - m.l - m.r, yTop = m.t, yBot = H - m.b;
+
+    const allVals = datasets.flatMap((d) => d.data.filter((v) => v != null));
+    const max = niceMax(Math.max(1, ...allVals));
+    const n = labels.length;
+    const x = (i) => m.l + (n === 1 ? iw / 2 : (iw / (n - 1)) * i);
+    const y = (v) => yBot - (v / max) * (yBot - yTop);
+
+    yAxis(svg, p, { x0: m.l, x1: m.l + iw, yTop, yBot, max, fmt, title: yTitle });
+    labels.forEach((lab, i) => svg.appendChild(txt(el("text", { x: x(i), y: yBot + 18, "text-anchor": "middle", "font-size": 11, fill: p.textSoft }), lab)));
+
+    datasets.forEach((ds) => {
+      const pts = ds.data.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean);
+      if (pts.length === 0) return;
+      // área leve
+      if (pts.length > 1) {
+        let d = `M${pts[0][0]} ${yBot} `;
+        pts.forEach((pt) => (d += `L${pt[0]} ${pt[1]} `));
+        d += `L${pts[pts.length - 1][0]} ${yBot} Z`;
+        const area = el("path", { d, fill: ds.color, opacity: 0.08 });
+        svg.appendChild(area);
+      }
+      // linha
+      let dl = "";
+      pts.forEach((pt, i) => (dl += (i === 0 ? "M" : "L") + pt[0] + " " + pt[1] + " "));
+      const path = el("path", { d: dl, fill: "none", stroke: ds.color, "stroke-width": 2.5, "stroke-linejoin": "round", "stroke-linecap": "round" });
+      svg.appendChild(path);
+      if (path.getTotalLength) {
+        const len = path.getTotalLength();
+        path.style.strokeDasharray = len;
+        path.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 650, easing: "ease-out" });
+      }
+      // pontos
+      ds.data.forEach((v, i) => {
+        if (v == null) return;
+        const c = el("circle", { cx: x(i), cy: y(v), r: 4, fill: p.surface, stroke: ds.color, "stroke-width": 2.5 });
+        interactive(c, `<strong>${labels[i]}</strong><br>${ds.label}: ${fmt ? fmt(v) : v}`);
+        svg.appendChild(c);
+      });
+    });
+
+    legend(svg, p, datasets.map((d) => ({ label: d.label, color: d.color })), W / 2, 24);
+    return svg;
+  }
+
+  // =============================================================
+  // Rosca / Pizza com legenda alinhada
+  // =============================================================
+  function donut(host, { items, fmt, donut: isDonut = true }) {
+    const p = palette();
+    const W = 680, H = 360;
+    const svg = makeSvg(host, W, H);
+    const cx = 170, cy = H / 2, R = 118, r = isDonut ? 66 : 0;
+    const total = items.reduce((a, b) => a + b.value, 0);
+    const colors = p.series;
+    let ang = -Math.PI / 2;
+
+    items.forEach((it, i) => {
+      const frac = it.value / total;
+      const a2 = ang + frac * Math.PI * 2;
+      const large = frac > 0.5 ? 1 : 0;
+      const x1 = cx + R * Math.cos(ang), y1 = cy + R * Math.sin(ang);
+      const x2 = cx + R * Math.cos(a2), y2 = cy + R * Math.sin(a2);
+      let d;
+      if (r > 0) {
+        const xi1 = cx + r * Math.cos(a2), yi1 = cy + r * Math.sin(a2);
+        const xi2 = cx + r * Math.cos(ang), yi2 = cy + r * Math.sin(ang);
+        d = `M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${xi1} ${yi1} A${r} ${r} 0 ${large} 0 ${xi2} ${yi2} Z`;
+      } else {
+        d = `M${cx} ${cy} L${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`;
+      }
+      const color = colors[i % colors.length];
+      const path = el("path", { d, fill: color, stroke: p.surface, "stroke-width": 3 });
+      const pct = (frac * 100).toFixed(1);
+      interactive(path, `<strong>${it.label}</strong><br>${fmt ? fmt(it.value) : it.value} · ${pct}%`);
+      svg.appendChild(path);
+      ang = a2;
+    });
+    // animação de giro
+    const first = svg.querySelector("path");
+    if (first) svg.querySelectorAll("path").forEach((pth) => pth.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, easing: "ease-out" }));
+
+    if (isDonut) {
+      svg.appendChild(txt(el("text", { x: cx, y: cy - 4, "text-anchor": "middle", "font-size": 12, fill: p.textSoft, "font-weight": 700 }), "Total"));
+      svg.appendChild(txt(el("text", { x: cx, y: cy + 16, "text-anchor": "middle", "font-size": 15, fill: p.text, "font-weight": 800 }), fmt ? fmt(total) : total));
+    }
+
+    // legenda com % e valor
+    const lx = 350;
+    const lineH = Math.min(30, (H - 40) / items.length);
+    let ly = cy - (items.length * lineH) / 2 + lineH / 2;
+    items.forEach((it, i) => {
+      const color = colors[i % colors.length];
+      const pct = ((it.value / total) * 100).toFixed(1);
+      svg.appendChild(el("rect", { x: lx, y: ly - 9, width: 13, height: 13, rx: 3, fill: color }));
+      svg.appendChild(txt(el("text", { x: lx + 20, y: ly + 1, "font-size": 12.5, fill: p.text, "font-weight": 600 }), it.label));
+      svg.appendChild(txt(el("text", { x: W - 20, y: ly + 1, "text-anchor": "end", "font-size": 12, fill: p.textSoft }), `${pct}% · ${fmt ? fmt(it.value) : it.value}`));
+      ly += lineH;
+    });
+    return svg;
+  }
+
+  // =============================================================
+  // Cascata (waterfall) com conectores
+  // steps: [{label, value, type:'start'|'end'|'delta'}]
+  // =============================================================
+  function waterfall(host, { steps, fmt, yTitle }) {
+    const p = palette();
+    const W = 680, H = 440, m = { t: 44, r: 20, b: 108, l: 76 };
+    const svg = makeSvg(host, W, H);
+    const iw = W - m.l - m.r, yTop = m.t, yBot = H - m.b;
+
+    let running = 0, maxTop = 0;
+    const bars = [];
+    steps.forEach((s) => {
+      if (s.type === "start") { bars.push({ label: s.label, base: 0, top: s.value, value: s.value, kind: "total" }); running = s.value; }
+      else if (s.type === "end") { bars.push({ label: s.label, base: 0, top: s.value, value: s.value, kind: "total" }); }
+      else {
+        const base = running, top = running + s.value;
+        bars.push({ label: s.label, base: Math.min(base, top), top: Math.max(base, top), value: s.value, kind: s.value >= 0 ? "up" : "down" });
+        running = top;
+      }
+      maxTop = Math.max(maxTop, running, s.value || 0);
+    });
+    const max = niceMax(maxTop);
+    const y = (v) => yBot - (v / max) * (yBot - yTop);
+
+    yAxis(svg, p, { x0: m.l, x1: m.l + iw, yTop, yBot, max, fmt, title: yTitle });
+
+    const slot = iw / bars.length;
+    const bw = slot * 0.56;
+    // nível acumulado ao final de cada barra (para os conectores)
+    let acc = 0;
+    const endLevels = bars.map((b) => {
+      if (b.kind === "total") { acc = b.top; return b.top; }
+      acc += b.value; return acc;
+    });
+
+    bars.forEach((b, i) => {
+      const x = m.l + slot * i + (slot - bw) / 2;
+      const xRight = x + bw;
+      const yTopBar = y(b.top), yBase = y(b.base);
+      const color = b.kind === "total" ? p.brand : b.kind === "up" ? p.pos : p.neg;
+
+      // conector tracejado: do nível acumulado da barra anterior até a próxima
+      if (i < bars.length - 1) {
+        const yLevel = y(endLevels[i]);
+        const nextX = m.l + slot * (i + 1) + (slot - bw) / 2;
+        svg.appendChild(el("line", { x1: xRight, y1: yLevel, x2: nextX, y2: yLevel, stroke: p.axis, "stroke-width": 1.5, "stroke-dasharray": "4 3", opacity: .55 }));
+      }
+
+      const rect = el("rect", { x, y: yTopBar, width: bw, height: Math.max(2, yBase - yTopBar), rx: 4, fill: color });
+      const signo = b.kind === "total" ? "" : (b.value >= 0 ? "+" : "−");
+      interactive(rect, `<strong>${b.label}</strong><br>${signo}${fmt ? fmt(Math.abs(b.value)) : Math.abs(b.value)}`);
+      svg.appendChild(rect);
+      animateGrow(rect, b.kind === "total" ? yBase : (b.kind === "up" ? yBase : yTopBar));
+      // valor acima da barra
+      svg.appendChild(txt(el("text", { x: x + bw / 2, y: yTopBar - 7, "text-anchor": "middle", "font-size": 10, "font-weight": 700, fill: color }),
+        `${signo}${fmt ? fmt(Math.abs(b.value)) : Math.abs(b.value)}`));
+      // rótulo embaixo (rotacionado se longo)
+      xLabel(svg, p, b.label, m.l + slot * i + slot / 2, yBot, slot);
+    });
+
+    // legenda de cores
+    legend(svg, p, [
+      { label: "Total", color: p.brand },
+      { label: "Acima do orçado", color: p.pos },
+      { label: "Economia", color: p.neg },
+    ], W / 2, 24);
+    return svg;
+  }
+
+  global.MiniChart = { groupedBar, horizontalBar, line, donut, waterfall, palette };
+})(window);
+
+</script>
+  <script>
+// =====================================================================
+// app.js — lógica do dashboard (100% offline).
+// Filtro por período, agregações, tabelas, gráficos (MiniChart), tema e PDF.
+// =====================================================================
+
+// ---------- Formatação (dados em R$ mil -> reais cheios) ----------
+const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const brlCompact = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 });
+const fmtMil = (v) => (v == null ? "—" : brl.format(Math.abs(v) * 1000));
+const fmtAxis = (vMil) => brlCompact.format(vMil * 1000);
+const fmtSigned = (v) => {
+  if (v == null) return "—";
+  const s = v > 0 ? "+" : v < 0 ? "−" : "";
+  return `${s}${fmtMil(Math.abs(v))}`;
+};
+const fmtPct = (v) => (v == null ? "n/a" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}%`);
+
+// ---------- Estado do filtro ----------
+let ini = 0, fim = MESES.length - 1; // índices inclusivos
+
+// soma um array mensal no intervalo [ini..fim], ignorando nulls; retorna null se todo nulo
+function somaIntervalo(arr) {
+  let soma = 0, temValor = false;
+  for (let i = ini; i <= fim; i++) {
+    if (arr[i] != null) { soma += arr[i]; temValor = true; }
+  }
+  return temValor ? Math.round(soma * 10) / 10 : null;
+}
+
+// agrega os grupos conforme o período selecionado
+function gruposPeriodo() {
+  return SERIE_MENSAL.map((s) => {
+    const orcado = somaIntervalo(s.orcadoMensal);
+    const realizado = somaIntervalo(s.realizadoMensal);
+    const desvio = realizado == null ? null : (orcado == null ? realizado : Math.round((realizado - orcado) * 10) / 10);
+    const pct = orcado && orcado !== 0 ? Math.round((desvio / orcado) * 100) : null;
+    return { grupo: s.grupo, orcado, realizado, desvio, pct };
+  });
+}
+
+// ---------- Setup do filtro ----------
+(function setupFilter() {
+  const selIni = document.getElementById("selIni");
+  const selFim = document.getElementById("selFim");
+  MESES.forEach((m, i) => {
+    selIni.appendChild(new Option(m, i));
+    selFim.appendChild(new Option(m, i));
+  });
+  selIni.value = 0;
+  selFim.value = MESES.length - 1;
+
+  const onChange = () => {
+    let a = parseInt(selIni.value, 10), b = parseInt(selFim.value, 10);
+    if (a > b) { [a, b] = [b, a]; selIni.value = a; selFim.value = b; }
+    ini = a; fim = b;
+    markPreset();
+    renderAll();
+  };
+  selIni.addEventListener("change", onChange);
+  selFim.addEventListener("change", onChange);
+
+  // presets por trimestre
+  const presets = { all: [0, 8], q1: [0, 2], q2: [3, 5], q3: [6, 8] };
+  document.getElementById("presets").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-preset]");
+    if (!btn) return;
+    const [a, b] = presets[btn.dataset.preset];
+    ini = a; fim = b;
+    selIni.value = a; selFim.value = b;
+    markPreset();
+    renderAll();
+  });
+
+  function markPreset() {
+    const map = { "0-8": "all", "0-2": "q1", "3-5": "q2", "6-8": "q3" };
+    const key = map[`${ini}-${fim}`];
+    document.querySelectorAll("#presets button").forEach((b) =>
+      b.classList.toggle("chip-active", b.dataset.preset === key));
+  }
+  window.__markPreset = markPreset;
+})();
+
+// ---------- Render principal (reexecuta a cada mudança de filtro) ----------
+function renderAll() {
+  const grupos = gruposPeriodo();
+  const periodoLabel = ini === fim ? MESES[ini] : `${MESES[ini]}–${MESES[fim]}`;
+  document.getElementById("tagPeriodo1").textContent = periodoLabel.toLowerCase();
+  document.getElementById("filterInfo").textContent = `${fim - ini + 1} ${fim - ini + 1 === 1 ? "mês" : "meses"} · ${periodoLabel}`;
+
+  renderKPIs(grupos);
+  renderTableGrupos(grupos);
+  renderChartGrupos(grupos);
+  renderWaterfall(grupos);
+  renderDonut(grupos);
+  renderLinha();
+  renderRanking(grupos);
+  renderInsights(grupos, periodoLabel);
+}
+
+// ---------- KPIs ----------
+function renderKPIs(grupos) {
+  const totO = grupos.reduce((s, g) => s + (g.orcado || 0), 0);
+  const totR = grupos.reduce((s, g) => s + (g.realizado || 0), 0);
+  const desvio = Math.round((totR - totO) * 10) / 10;
+  const pct = totO ? Math.round((desvio / totO) * 100) : 0;
+
+  document.getElementById("kpi-orcado").textContent = fmtMil(totO);
+  document.getElementById("kpi-realizado").textContent = fmtMil(totR);
+  const dEl = document.getElementById("kpi-desvio");
+  dEl.textContent = fmtSigned(desvio);
+  dEl.className = "kpi-value " + (desvio > 0 ? "val-pos" : "val-neg");
+  document.getElementById("kpi-desvio-pct").textContent = `${fmtPct(pct)} vs. orçado`;
+
+  // maior impacto absoluto
+  const top = grupos.slice().sort((a, b) => Math.abs(b.desvio || 0) - Math.abs(a.desvio || 0))[0];
+  const iEl = document.getElementById("kpi-impacto");
+  iEl.textContent = top ? top.grupo : "—";
+  iEl.className = "kpi-value";
+  document.getElementById("kpi-impacto-hint").textContent = top ? `${fmtSigned(top.desvio)} de desvio` : "";
+}
+
+// ---------- Tabela de grupos ----------
+function renderTableGrupos(grupos) {
+  const tbody = document.querySelector("#tableGrupos tbody");
+  tbody.innerHTML = "";
+  grupos.forEach((g) => {
+    const cls = (g.desvio || 0) > 0 ? "val-pos" : "val-neg";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${g.grupo}</td>
+      <td class="num">${g.orcado == null ? '<span class="muted">—</span>' : fmtMil(g.orcado)}</td>
+      <td class="num">${fmtMil(g.realizado)}</td>
+      <td class="num ${cls}">${fmtSigned(g.desvio)}</td>
+      <td class="num ${g.pct == null ? "muted" : cls}">${fmtPct(g.pct)}</td>`;
+    tbody.appendChild(tr);
+  });
+  const totO = grupos.reduce((s, g) => s + (g.orcado || 0), 0);
+  const totR = grupos.reduce((s, g) => s + (g.realizado || 0), 0);
+  const totD = Math.round((totR - totO) * 10) / 10;
+  let tfoot = document.querySelector("#tableGrupos tfoot");
+  if (tfoot) tfoot.remove();
+  tfoot = document.createElement("tfoot");
+  tfoot.innerHTML = `<tr>
+      <td>Total</td>
+      <td class="num">${fmtMil(totO)}</td>
+      <td class="num">${fmtMil(totR)}</td>
+      <td class="num ${totD > 0 ? "val-pos" : "val-neg"}">${fmtSigned(totD)}</td>
+      <td class="num ${totD > 0 ? "val-pos" : "val-neg"}">${fmtPct(totO ? Math.round((totD / totO) * 100) : null)}</td>
+    </tr>`;
+  document.getElementById("tableGrupos").appendChild(tfoot);
+}
+
+// ---------- Gráfico: barras agrupadas Orçado x Realizado ----------
+function renderChartGrupos(grupos) {
+  const p = MiniChart.palette();
+  MiniChart.groupedBar(document.getElementById("chartGrupos"), {
+    labels: grupos.map((g) => g.grupo),
+    datasets: [
+      { label: "Orçado", color: p.slate, data: grupos.map((g) => g.orcado) },
+      { label: "Realizado", color: p.brand, data: grupos.map((g) => g.realizado) },
+    ],
+    fmt: fmtAxis,
+    yTitle: "Valor (R$)",
+  });
+}
+
+// ---------- Gráfico: cascata (orçado -> desvios -> realizado) ----------
+function renderWaterfall(grupos) {
+  const totO = grupos.reduce((s, g) => s + (g.orcado || 0), 0);
+  const totR = grupos.reduce((s, g) => s + (g.realizado || 0), 0);
+  const steps = [{ label: "Orçado", value: totO, type: "start" }];
+  grupos.forEach((g) => {
+    if (g.desvio) steps.push({ label: g.grupo, value: g.desvio, type: "delta" });
+  });
+  steps.push({ label: "Realizado", value: totR, type: "end" });
+  MiniChart.waterfall(document.getElementById("chartWaterfall"), { steps, fmt: fmtAxis, yTitle: "Valor (R$)" });
+}
+
+// ---------- Gráfico: composição (rosca) ----------
+function renderDonut(grupos) {
+  const items = grupos
+    .filter((g) => (g.realizado || 0) > 0)
+    .map((g) => ({ label: g.grupo, value: g.realizado }))
+    .sort((a, b) => b.value - a.value);
+  MiniChart.donut(document.getElementById("chartDonut"), { items, fmt: fmtAxis, donut: true });
+}
+
+// ---------- Gráfico: linha (evolução mensal realizado) ----------
+function renderLinha() {
+  const p = MiniChart.palette();
+  const labels = MESES.slice(ini, fim + 1);
+  const datasets = SERIE_MENSAL.map((s, idx) => ({
+    label: s.grupo,
+    color: p.series[idx % p.series.length],
+    data: s.realizadoMensal.slice(ini, fim + 1),
+  }));
+  MiniChart.line(document.getElementById("chartLinha"), { labels, datasets, fmt: fmtAxis, yTitle: "Realizado (R$)" });
+}
+
+// ---------- Gráfico: ranking de impactos ----------
+function renderRanking(grupos) {
+  const p = MiniChart.palette();
+  const items = grupos
+    .filter((g) => g.desvio != null && g.desvio !== 0)
+    .map((g) => ({ label: g.grupo, value: g.desvio, color: g.desvio > 0 ? p.pos : p.neg }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  MiniChart.horizontalBar(document.getElementById("chartRanking"), {
+    items, fmt: fmtAxis, xTitle: "Desvio (R$) — vermelho acima do orçado · verde economia",
+  });
+}
+
+// ---------- Movimentos de pessoal (fixo: acumulado) ----------
+function renderPessoal() {
+  const p = MiniChart.palette();
+  // tabela
+  const badge = { "Favorável": "badge-fav", "Atenção": "badge-att", "Monitorar": "badge-mon", "Pontual?": "badge-pon" };
+  const tbody = document.querySelector("#tablePessoal tbody");
+  tbody.innerHTML = "";
+  PESSOAL.forEach((x) => {
+    const cls = x.desvio > 0 ? "val-pos" : "val-neg";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${x.linha}</td>
+      <td class="num ${cls}">${fmtSigned(x.desvio)}</td>
+      <td class="num ${x.variacao == null ? "muted" : cls}">${x.variacao == null ? "sem orçamento" : fmtPct(x.variacao)}</td>
+      <td><span class="badge ${badge[x.leitura] || "badge-mon"}">${x.leitura}</span></td>`;
+    tbody.appendChild(tr);
+  });
+  // gráfico
+  const items = PESSOAL
+    .map((x) => ({ label: x.linha, value: x.desvio, color: x.desvio > 0 ? p.pos : p.neg }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  MiniChart.horizontalBar(document.getElementById("chartPessoal"), {
+    items, fmt: fmtAxis, xTitle: "Desvio (R$) — verde economia · vermelho acima",
+  });
+}
+
+// ---------- Insights ----------
+function renderInsights(grupos, periodoLabel) {
+  const ul = document.getElementById("insights");
+  ul.innerHTML = "";
+  const items = [];
+
+  const comDesvio = grupos.filter((g) => g.desvio != null && g.desvio !== 0);
+  const maior = comDesvio.slice().sort((a, b) => Math.abs(b.desvio) - Math.abs(a.desvio))[0];
+  if (maior) {
+    const acima = maior.desvio > 0;
+    items.push({
+      cls: acima ? "warn" : "good",
+      html: `No período <strong>${periodoLabel}</strong>, o maior impacto é de <strong>${maior.grupo}</strong>: ${fmtSigned(maior.desvio)} ${acima ? "acima" : "abaixo"} do orçado${maior.pct != null ? ` (<strong>${fmtPct(maior.pct)}</strong>)` : ""}.`,
+    });
+  }
+  const pessoal = grupos.find((g) => g.grupo === "Pessoal");
+  if (pessoal && pessoal.desvio < 0) {
+    items.push({ cls: "good", html: `<strong>Pessoal</strong> segue favorável (${fmtSigned(pessoal.desvio)}), puxado pela queda de <strong>salários PJ (−36%)</strong> no acumulado.` });
+  }
+  const tec = grupos.find((g) => g.grupo === "Tecnologia");
+  if (tec && tec.desvio > 0) {
+    items.push({ cls: "warn", html: `<strong>Tecnologia</strong> é a principal pressão de gasto: ${fmtSigned(tec.desvio)}${tec.pct != null ? ` (${fmtPct(tec.pct)})` : ""}.` });
+  }
+  items.push({ cls: "warn", html: `Em Pessoal há migração para CLT: <strong>Salários CLT +22%</strong>, <strong>INSS +44%</strong> e <strong>FGTS +50%</strong> sobem juntos.` });
+  items.push({ cls: "", html: `<strong>Viagens</strong> e <strong>Rescisões</strong> surgiram sem orçamento previsto — avaliar se são eventos pontuais.` });
+
+  items.forEach((i) => {
+    const li = document.createElement("li");
+    if (i.cls) li.classList.add(i.cls);
+    li.innerHTML = i.html;
+    ul.appendChild(li);
+  });
+}
+
+// ---------- Tema claro/escuro ----------
+(function themeToggle() {
+  const btn = document.getElementById("btnTheme");
+  const label = btn.querySelector(".hbtn-label");
+  const icon = btn.querySelector(".hbtn-icon");
+  const setTheme = (dark) => {
+    document.documentElement.classList.toggle("dark", dark);
+    btn.setAttribute("aria-pressed", String(dark));
+    label.textContent = dark ? "Tema claro" : "Tema escuro";
+    icon.textContent = dark ? "☀️" : "🌙";
+    try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch (e) {}
+    // redesenha os gráficos para pegar as cores do tema
+    if (window.__ready) { renderAll(); renderPessoal(); }
+  };
+  let saved = null;
+  try { saved = localStorage.getItem("theme"); } catch (e) {}
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  btn.addEventListener("click", () => setTheme(!document.documentElement.classList.contains("dark")));
+  // aplica sem redesenhar ainda (os gráficos vêm no boot)
+  document.documentElement.classList.toggle("dark", saved ? saved === "dark" : prefersDark);
+  const dark = document.documentElement.classList.contains("dark");
+  btn.setAttribute("aria-pressed", String(dark));
+  label.textContent = dark ? "Tema claro" : "Tema escuro";
+  icon.textContent = dark ? "☀️" : "🌙";
+})();
+
+// ---------- Exportar PDF ----------
+document.getElementById("btnPdf").addEventListener("click", () => window.print());
+
+// ---------- Boot ----------
+renderAll();
+renderPessoal();
+window.__ready = true;
+
+// redesenha ao redimensionar (SVG recalcula posições)
+let _rt;
+window.addEventListener("resize", () => {
+  clearTimeout(_rt);
+  _rt = setTimeout(() => { renderAll(); renderPessoal(); }, 150);
+});
+
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Análise do Orçamento de TI · Set/26</title>
+  <meta name="description" content="Dashboard de análise do orçamento de TI — desvios por grupo, impactos e movimentos de pessoal (jan–set)." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="brand-mark">TI</div>
+        <div>
+          <h1>Análise do Orçamento de TI</h1>
+          <p class="subtitle">Desvios, impactos e movimentos de pessoal · jan–set 2026</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnTheme" class="hbtn" type="button" aria-pressed="false" title="Alternar tema">
+          <span class="hbtn-icon" aria-hidden="true">🌙</span>
+          <span class="hbtn-label">Tema escuro</span>
+        </button>
+        <button id="btnPdf" class="hbtn" type="button" title="Exportar para PDF">
+          <span class="hbtn-icon" aria-hidden="true">⬇️</span>
+          <span class="hbtn-label">Exportar PDF</span>
+        </button>
+        <span class="header-badge">100% offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Barra de filtro de período -->
+  <div class="filterbar">
+    <div class="container filterbar-inner">
+      <div class="filter-group">
+        <label for="selIni">Período</label>
+        <select id="selIni" aria-label="Mês inicial"></select>
+        <span class="filter-sep">até</span>
+        <select id="selFim" aria-label="Mês final"></select>
+      </div>
+      <div class="filter-presets" id="presets">
+        <button type="button" data-preset="all" class="chip chip-active">Jan–Set</button>
+        <button type="button" data-preset="q1">1º tri</button>
+        <button type="button" data-preset="q2">2º tri</button>
+        <button type="button" data-preset="q3">3º tri</button>
+      </div>
+      <div class="filter-info" id="filterInfo"></div>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- KPIs -->
+    <section class="kpi-grid" aria-label="Indicadores-chave">
+      <article class="kpi-card">
+        <span class="kpi-label">Total Orçado</span>
+        <span class="kpi-value" id="kpi-orcado">—</span>
+        <span class="kpi-hint" id="kpi-orcado-hint">Período selecionado</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Total Realizado</span>
+        <span class="kpi-value" id="kpi-realizado">—</span>
+        <span class="kpi-hint">Executado no período</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Desvio Total</span>
+        <span class="kpi-value" id="kpi-desvio">—</span>
+        <span class="kpi-hint" id="kpi-desvio-pct">—</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Maior Impacto</span>
+        <span class="kpi-value" id="kpi-impacto">—</span>
+        <span class="kpi-hint" id="kpi-impacto-hint">Grupo que mais pesou</span>
+      </article>
+    </section>
+
+    <!-- Orçado x Realizado -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Orçado × Realizado por grupo</h2>
+        <span class="panel-tag" id="tagPeriodo1">jan–set</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap" id="chartGrupos"></div>
+        <div class="table-wrap">
+          <table class="data-table" id="tableGrupos">
+            <thead>
+              <tr>
+                <th>Grupo</th>
+                <th class="num">Orçado</th>
+                <th class="num">Realizado</th>
+                <th class="num">Desvio</th>
+                <th class="num">%</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Impactos: waterfall + composição -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Impacto no resultado</h2>
+        <span class="panel-tag">cascata de desvios</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap" id="chartWaterfall"></div>
+        <div>
+          <h3 class="mini-title">Composição do realizado</h3>
+          <div class="chart-wrap" id="chartDonut"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Evolução mensal -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Evolução mensal — Realizado</h2>
+        <span class="panel-tag">série temporal</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap wide" id="chartLinha"></div>
+      </div>
+    </section>
+
+    <!-- Ranking de impactos -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Ranking de impactos (desvio R$)</h2>
+        <span class="panel-tag">o que mais pesou</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap wide" id="chartRanking"></div>
+      </div>
+    </section>
+
+    <!-- Movimentos de pessoal -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Principais movimentos de Pessoal</h2>
+        <span class="panel-tag">acumulado jan–set</span>
+      </div>
+      <div class="panel-body split">
+        <div class="chart-wrap" id="chartPessoal"></div>
+        <div class="table-wrap">
+          <table class="data-table" id="tablePessoal">
+            <thead>
+              <tr>
+                <th>Linha</th>
+                <th class="num">Desvio</th>
+                <th class="num">Variação</th>
+                <th>Leitura</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Insights -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Leitura rápida</h2>
+      </div>
+      <div class="panel-body">
+        <ul class="insights" id="insights"></ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Fonte: planilha <em>análise-do-orçamento-de-ti-set-26</em>. Valores em reais; dados em R$ mil na origem. A série mensal é uma distribuição estimada do acumulado (soma bate com o total). Dashboard 100% offline — gráficos em SVG, sem dependências externas.</p>
+    </div>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -2,6 +2,13 @@
 
 Integração com o Trello (API REST oficial) para **listar boards**, **verificar prazos** e **gerar um dashboard HTML visual**. Sem dependências externas — usa apenas Node.js 20+ e `fetch` nativo.
 
+## Rotas no deploy (Vercel)
+
+| Rota          | Conteúdo                                                        |
+| ------------- | -------------------------------------------------------------- |
+| `/`           | Dashboard do Trello ao vivo (este projeto).                    |
+| `/orcamento`  | Dashboard "Análise do Orçamento de TI" (conteúdo preservado).  |
+
 ## Pré-requisitos
 
 - Node.js **20 ou superior**
