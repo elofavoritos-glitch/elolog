@@ -7,5 +7,8 @@ dist/
 # Dashboard gerado localmente pela CLI
 /dashboard.html
 
-# Kiro (configs locais do ambiente)
-.kiro/
+# Kiro: ignora configs locais do ambiente, mas versiona steering
+.kiro/*
+!.kiro/steering/
+.kiro/steering/*
+!.kiro/steering/fluxo-pr.md
