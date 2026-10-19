@@ -27,7 +27,7 @@ export async function coletarDados() {
 
     const mapById = new Map(cardsEnriquecidos.map((c) => [c.id, c]));
 
-    // Atribui grupo a cada lista e repassa aos cards.
+    // Atribui grupo a cada lista e repassa aos cards (enriquecidos).
     data.lists = data.lists.map((l) => {
       const grupo = classificarLista(l.name);
       const cards = l.cards.map((c) => {
@@ -40,12 +40,36 @@ export async function coletarDados() {
       return { ...l, grupo, cards };
     });
 
+    // Substitui os cards "crus" do board pelos enriquecidos (com grupo).
+    data.cards = cardsEnriquecidos;
+
     boards.push(data);
     todosCards.push(...cardsEnriquecidos);
   }
 
   const contagemGlobal = contarPorStatus(todosCards);
-  return { me, boards, todosCards, contagemGlobal, porGrupo };
+
+  // Estatísticas por board: total, finalizados, % concluído e grupos.
+  const porBoard = boards.map((b) => {
+    const cards = b.cards || [];
+    const porGrupoBoard = {};
+    for (const g of Object.keys(GRUPOS)) porGrupoBoard[g] = 0;
+    for (const c of cards) porGrupoBoard[c.grupo] = (porGrupoBoard[c.grupo] || 0) + 1;
+    const finalizados = porGrupoBoard.finalizado || 0;
+    const total = cards.length || 0;
+    const pct = total > 0 ? Math.round((finalizados / total) * 100) : 0;
+    return {
+      id: b.id,
+      name: b.name,
+      url: b.url,
+      total,
+      finalizados,
+      pct,
+      porGrupo: porGrupoBoard,
+    };
+  });
+
+  return { me, boards, todosCards, contagemGlobal, porGrupo, porBoard };
 }
 
 export async function construirHtml() {

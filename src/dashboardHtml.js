@@ -16,7 +16,14 @@ const CORES_LABEL = {
   orange_dark: '#cd8313', red_dark: '#b04632', purple_dark: '#89609e', blue_dark: '#055a8c',
 };
 
-// Considera "sem título" cards cujo nome é vazio, "." ou só pontuação/espaços.
+// Cores estáveis para avatares de responsáveis (por iniciais).
+const CORES_AVATAR = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#16a34a', '#ca8a04', '#dc2626'];
+function corAvatar(seed = '') {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % CORES_AVATAR.length;
+  return CORES_AVATAR[h];
+}
+
 function semTitulo(c) {
   const n = (c.name || '').replace(/[.\s·•\-_]/g, '');
   return n.length === 0;
@@ -32,6 +39,14 @@ function renderLabels(labels = []) {
     })
     .join('');
   return `<div class="card-labels">${chips}</div>`;
+}
+
+function renderMembros(membros = []) {
+  if (!membros.length) return '';
+  const avatares = membros
+    .map((m) => `<span class="avatar" style="background:${corAvatar(m.iniciais)}" title="${escapeHtml(m.nome)}">${escapeHtml(m.iniciais)}</span>`)
+    .join('');
+  return `<span class="avatares">${avatares}</span>`;
 }
 
 function prioridade(c) {
@@ -64,9 +79,9 @@ function renderCardFoco(c, destaqueUrgente = false) {
       ${flag}${renderLabels(c.labels)}
       <span class="card-nome">${nome}</span>
       <span class="card-meta">
-        <span class="tag tag--board">${escapeHtml(c.boardName)}</span>
         <span class="tag tag--lista">${escapeHtml(c.listaNome)}</span>
         ${textoPrazo(c)}
+        ${renderMembros(c.membros)}
       </span>
     </a>`;
 }
@@ -78,7 +93,6 @@ function renderLinhaSimples(c) {
     <span class="simples-board">${escapeHtml(c.boardName)}</span>${prazo}</li>`;
 }
 
-// Card de número grande no painel de totais.
 function kpi(num, label, cor, icone, destaque = false) {
   return `<div class="kpi${destaque ? ' kpi--hero' : ''}" style="--cor:${cor}">
     <div class="kpi-top"><span class="kpi-icone">${icone}</span><span class="kpi-num">${num}</span></div>
@@ -86,12 +100,37 @@ function kpi(num, label, cor, icone, destaque = false) {
   </div>`;
 }
 
-export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
+// Barra de progresso de um projeto.
+function renderProgresso(b) {
+  return `
+    <div class="prog">
+      <div class="prog-head">
+        <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener" class="prog-nome">${escapeHtml(b.name)}</a>
+        <span class="prog-pct">${b.pct}%</span>
+      </div>
+      <div class="prog-bar"><div class="prog-fill" style="width:${b.pct}%"></div></div>
+      <div class="prog-sub">${b.finalizados} de ${b.total} concluídos</div>
+    </div>`;
+}
+
+// Gráfico de distribuição (barras horizontais, puro CSS).
+function renderGrafico(dist) {
+  const max = Math.max(1, ...dist.map((d) => d.valor));
+  return dist
+    .map((d) => `
+      <div class="graf-linha">
+        <span class="graf-label">${d.emoji} ${d.label}</span>
+        <div class="graf-track"><div class="graf-bar" style="width:${(d.valor / max) * 100}%;background:${d.cor}"></div></div>
+        <span class="graf-val">${d.valor}</span>
+      </div>`)
+    .join('');
+}
+
+export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me }) {
   const geradoEm = new Date().toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   const g = porGrupo || {};
-  // Remove cards sem título dos grupos de foco (limpa a visão).
   const limpar = (arr) => (arr || []).filter((c) => !semTitulo(c));
   const ordenarPorPrazo = (arr) => [...arr].sort((a, b) => prioridade(a) - prioridade(b) ||
     (a.due ? new Date(a.due) : Infinity) - (b.due ? new Date(b.due) : Infinity));
@@ -109,7 +148,6 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
   const totalHeroi = totalFazer + ideias.length;
   const totalGeral = todosCards ? todosCards.length : 0;
 
-  // Todos os atrasados (de qualquer grupo não-finalizado), ordenados.
   const atrasados = ordenarPorPrazo(
     (todosCards || []).filter(
       (c) => c.status === STATUS.ATRASADO && c.grupo !== 'finalizado' && c.grupo !== 'outros' && !semTitulo(c)
@@ -123,12 +161,45 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
        </section>`
     : '';
 
-  const blocoProducao = producao.length
-    ? `<section class="painel painel--producao">
-         <h2>${GRUPOS.producao.emoji} Indo pra produção <span class="cont">${producao.length}</span></h2>
-         <div class="cards cards--grid">${producao.map((c) => renderCardFoco(c)).join('')}</div>
+  // "A Fazer" agrupado por board/projeto (urgentes incluídos aqui).
+  const paraFazerTodos = [...urgente, ...fazer];
+  const porBoardFazer = new Map();
+  for (const c of paraFazerTodos) {
+    if (!porBoardFazer.has(c.boardName)) porBoardFazer.set(c.boardName, []);
+    porBoardFazer.get(c.boardName).push(c);
+  }
+  const blocosFazerPorProjeto = [...porBoardFazer.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([board, cards]) => `
+      <div class="proj-grupo">
+        <div class="proj-head"><span class="proj-nome">${escapeHtml(board)}</span><span class="sub-cont">${cards.length}</span></div>
+        <div class="cards">${cards.map((c) => renderCardFoco(c)).join('')}</div>
+      </div>`)
+    .join('');
+
+  // Barras de progresso por projeto (só boards com cards).
+  const progressos = (porBoard || []).filter((b) => b.total > 0).sort((a, b) => b.total - a.total);
+  const blocoProgresso = progressos.length
+    ? `<section class="painel">
+         <h2>📈 Progresso por projeto</h2>
+         <div class="progs">${progressos.map(renderProgresso).join('')}</div>
        </section>`
     : '';
+
+  // Gráfico de distribuição por grupo.
+  const dist = [
+    { label: 'A fazer', valor: fazer.length + urgente.length, cor: '#2563eb', emoji: '🔵' },
+    { label: 'Ideias', valor: ideias.length, cor: '#06b6d4', emoji: '💡' },
+    { label: 'Em andamento', valor: andamento.length, cor: '#f59e0b', emoji: '🟠' },
+    { label: 'Produção', valor: producao.length, cor: '#7c3aed', emoji: '🚀' },
+    { label: 'Pausado', valor: pausado.length, cor: '#94a3b8', emoji: '⏸️' },
+    { label: 'Finalizados', valor: finalizado.length, cor: '#10b981', emoji: '✅' },
+  ].filter((d) => d.valor > 0);
+  const blocoGrafico = `
+    <section class="painel">
+      <h2>📊 Distribuição dos cards</h2>
+      <div class="grafico">${renderGrafico(dist)}</div>
+    </section>`;
 
   const recolhivel = (emoji, titulo, arr) => arr.length
     ? `<details class="recolhivel">
@@ -136,8 +207,15 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
          <ul class="lista-simples">${arr.map(renderLinhaSimples).join('')}</ul>
        </details>` : '';
 
+  const blocoProducao = producao.length
+    ? `<section class="painel painel--producao">
+         <h2>${GRUPOS.producao.emoji} Indo pra produção <span class="cont">${producao.length}</span></h2>
+         <div class="cards cards--grid">${producao.map((c) => renderCardFoco(c)).join('')}</div>
+       </section>`
+    : '';
+
   return `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-tema="claro">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -147,27 +225,38 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f4f6fb; --surface: #ffffff; --ink: #1a2235; --muted: #6b7a90;
+    --bg: #f4f6fb; --surface: #ffffff; --surface2: #fbfcfe; --ink: #1a2235; --muted: #6b7a90;
     --line: #eef1f6; --azul: #2563eb; --radius: 16px;
     --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+    --track: #eceff4;
+  }
+  html[data-tema="escuro"] {
+    --bg: #0f1420; --surface: #171d2b; --surface2: #1c2433; --ink: #e7ecf3; --muted: #93a1b5;
+    --line: #26303f; --azul: #4f86ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    --track: #26303f;
   }
   * { box-sizing: border-box; }
   body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
          margin: 0; background: var(--bg); color: var(--ink);
-         -webkit-font-smoothing: antialiased; }
+         -webkit-font-smoothing: antialiased; transition: background .2s, color .2s; }
   a { text-decoration: none; color: inherit; }
 
-  header { padding: 32px 24px 0; max-width: 1280px; margin: 0 auto; }
+  header { padding: 32px 24px 0; max-width: 1280px; margin: 0 auto;
+           display: flex; align-items: flex-start; justify-content: space-between; }
   .brand { display: flex; align-items: center; gap: 12px; }
   .brand h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
   .brand .logo { width: 44px; height: 44px; border-radius: 12px;
                  background: linear-gradient(135deg, #2563eb, #7c3aed);
                  display: grid; place-items: center; font-size: 22px; box-shadow: var(--shadow); }
-  header .sub { color: var(--muted); font-size: 13px; margin: 8px 0 0 56px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 8px 0 0 56px; }
+  .toggle-tema { background: var(--surface); border: 1px solid var(--line); color: var(--ink);
+                 border-radius: 12px; padding: 9px 14px; cursor: pointer; font-size: 14px;
+                 font-weight: 600; box-shadow: var(--shadow); display: flex; align-items: center; gap: 7px; }
+  .toggle-tema:hover { border-color: var(--azul); }
 
   main { max-width: 1280px; margin: 0 auto; padding: 24px; }
 
-  /* KPIs */
   .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 28px; }
   @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 560px)  { .kpis { grid-template-columns: repeat(2, 1fr); } }
@@ -179,54 +268,75 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
   .kpi-num { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
   .kpi-label { margin-top: 8px; font-size: 12px; color: var(--muted); font-weight: 600;
                text-transform: uppercase; letter-spacing: .04em; }
-  .kpi--hero { background: linear-gradient(135deg, #eff4ff, #ffffff); }
   .kpi--hero .kpi-num { font-size: 40px; color: var(--cor); }
 
-  /* Alerta de atrasados */
-  .alerta { background: linear-gradient(180deg, #fff1f1, #fff); border: 1px solid #fcd4d4;
+  .alerta { background: var(--surface); border: 1px solid #fcd4d4; border-left: 5px solid #ef4444;
             border-radius: var(--radius); padding: 18px 20px; margin-bottom: 28px; box-shadow: var(--shadow); }
-  .alerta-head { font-size: 15px; color: #b42318; margin-bottom: 14px; }
+  html[data-tema="escuro"] .alerta { border-color: #5b2626; }
+  .alerta-head { font-size: 15px; color: #ef4444; margin-bottom: 14px; }
   .alerta-head strong { font-size: 17px; }
   .alerta-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 10px; }
 
-  /* Layout principal */
   .grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 20px; align-items: start; }
   @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
   .painel { background: var(--surface); border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow); }
   .painel--producao { grid-column: 1 / -1; margin-top: 20px; }
   .painel h2 { margin: 0 0 16px; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
-  .cont { background: #eef2f9; color: #475467; border-radius: 20px; padding: 2px 11px; font-size: 13px; font-weight: 700; }
+  .cont { background: var(--track); color: var(--muted); border-radius: 20px; padding: 2px 11px; font-size: 13px; font-weight: 700; }
   .cont--sm { font-size: 12px; padding: 1px 9px; }
   .painel--fazer h2 .cont { background: var(--azul); color: #fff; }
 
-  .sub { }
-  .sub-titulo { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 700;
-                margin: 22px 0 12px; color: #344054; }
-  .sub-titulo:first-of-type { margin-top: 4px; }
-  .sub-cont { background: #eef2f9; color: #475467; border-radius: 16px; padding: 1px 10px; font-size: 12px; }
+  .proj-grupo { margin-bottom: 20px; }
+  .proj-head { display: flex; align-items: center; gap: 9px; margin: 18px 0 11px; font-size: 14px; font-weight: 700; }
+  .proj-nome { color: var(--ink); }
+  .proj-grupo:first-child .proj-head { margin-top: 2px; }
+  .sub-cont { background: var(--track); color: var(--muted); border-radius: 16px; padding: 1px 10px; font-size: 12px; }
 
   .cards { display: flex; flex-direction: column; gap: 10px; }
   .cards--grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); }
 
-  .card { display: block; background: #fbfcfe; border: 1px solid var(--line); border-radius: 12px;
-          padding: 13px 15px; transition: all .12s ease; position: relative; }
-  .card:hover { border-color: #d6e0f5; box-shadow: 0 6px 18px rgba(37,99,235,.12); transform: translateY(-2px); background: #fff; }
-  .card.is-atrasado { border-color: #fbc5c5; background: #fff7f7; }
+  .card { display: block; background: var(--surface2); border: 1px solid var(--line); border-radius: 12px;
+          padding: 13px 15px; transition: all .12s ease; }
+  .card:hover { border-color: var(--azul); box-shadow: 0 6px 18px rgba(37,99,235,.14); transform: translateY(-2px); }
+  .card.is-atrasado { border-color: #f1a8a8; }
   .card-nome { display: block; font-size: 14.5px; font-weight: 600; margin: 2px 0 9px; line-height: 1.35; }
-  .sem-titulo { color: #9aa7b8; font-weight: 500; }
+  .sem-titulo { color: var(--muted); font-weight: 500; }
   .card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 11.5px; }
   .tag { border-radius: 6px; padding: 2px 8px; font-weight: 600; }
-  .tag--board { background: #eef2f9; color: #475467; }
   .tag--lista { background: #e7f0ff; color: #1d4ed8; }
+  html[data-tema="escuro"] .tag--lista { background: #1e2d4d; color: #8db4ff; }
   .due { font-weight: 700; margin-left: 2px; }
   .flag { display: inline-block; font-size: 9.5px; font-weight: 800; padding: 2px 8px;
           border-radius: 6px; letter-spacing: .06em; margin-bottom: 7px; }
   .flag--urgente { background: #ef4444; color: #fff; }
   .card-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
   .chip { border-radius: 5px; padding: 1px 7px; font-size: 10px; font-weight: 700; color: #fff; }
-  .vazio { text-align: center; color: #98a2b3; padding: 24px 10px; font-size: 14px; }
+  .avatares { display: inline-flex; margin-left: auto; }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 9.5px; font-weight: 800;
+            display: grid; place-items: center; border: 2px solid var(--surface2); margin-left: -6px; }
+  .avatar:first-child { margin-left: 0; }
+  .vazio { text-align: center; color: var(--muted); padding: 24px 10px; font-size: 14px; }
 
-  /* Recolhíveis */
+  /* Progresso */
+  .progs { display: flex; flex-direction: column; gap: 16px; }
+  .prog-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+  .prog-nome { font-weight: 600; font-size: 14px; }
+  .prog-pct { font-weight: 800; font-size: 14px; color: var(--azul); }
+  .prog-bar { height: 10px; background: var(--track); border-radius: 6px; overflow: hidden; }
+  .prog-fill { height: 100%; background: linear-gradient(90deg, #10b981, #34d399); border-radius: 6px; transition: width .5s ease; }
+  .prog-sub { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+
+  /* Gráfico */
+  .grafico { display: flex; flex-direction: column; gap: 11px; }
+  .graf-linha { display: grid; grid-template-columns: 130px 1fr 36px; align-items: center; gap: 10px; font-size: 13px; }
+  .graf-label { color: var(--muted); font-weight: 600; }
+  .graf-track { height: 14px; background: var(--track); border-radius: 7px; overflow: hidden; }
+  .graf-bar { height: 100%; border-radius: 7px; transition: width .5s ease; }
+  .graf-val { font-weight: 800; text-align: right; }
+
+  .dois-paineis { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 28px; }
+  @media (max-width: 880px) { .dois-paineis { grid-template-columns: 1fr; } }
+
   .secundaria { margin-top: 30px; }
   .secundaria > h2 { font-size: 13px; text-transform: uppercase; color: var(--muted);
                      letter-spacing: .06em; margin: 0 0 12px; font-weight: 700; }
@@ -234,23 +344,26 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
   .recolhivel > summary { cursor: pointer; padding: 14px 18px; font-weight: 600; font-size: 14px;
                           list-style: none; display: flex; align-items: center; gap: 10px; }
   .recolhivel > summary::-webkit-details-marker { display: none; }
-  .recolhivel > summary::before { content: '▸'; color: #98a2b3; transition: transform .15s; }
+  .recolhivel > summary::before { content: '▸'; color: var(--muted); transition: transform .15s; }
   .recolhivel[open] > summary::before { transform: rotate(90deg); }
   .lista-simples { list-style: none; margin: 0; padding: 0 18px 14px; }
   .lista-simples li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
-  .lista-simples a { flex: 1; color: #344054; }
+  .lista-simples a { flex: 1; color: var(--ink); }
   .lista-simples a:hover { color: var(--azul); }
-  .simples-board { background: #eef2f9; color: #667085; border-radius: 5px; padding: 1px 7px; font-size: 11px; }
-  .simples-due { color: #98a2b3; font-size: 11px; }
+  .simples-board { background: var(--track); color: var(--muted); border-radius: 5px; padding: 1px 7px; font-size: 11px; }
+  .simples-due { color: var(--muted); font-size: 11px; }
 
-  footer { text-align: center; color: #98a2b3; font-size: 12px; padding: 28px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 28px; }
   footer a { color: var(--azul); font-weight: 600; }
 </style>
 </head>
 <body>
   <header>
-    <div class="brand"><div class="logo">🎯</div><h1>Foco do Dia</h1></div>
-    <div class="sub">${me ? escapeHtml(me.fullName || me.username) + ' · ' : ''}${totalGeral} cards no total · atualizado ${geradoEm}</div>
+    <div>
+      <div class="brand"><div class="logo">🎯</div><h1>Foco do Dia</h1></div>
+      <div class="sub">${me ? escapeHtml(me.fullName || me.username) + ' · ' : ''}${totalGeral} cards no total · atualizado ${geradoEm}</div>
+    </div>
+    <button class="toggle-tema" id="toggleTema" aria-label="Alternar tema"><span id="temaIcone">🌙</span> <span id="temaTexto">Escuro</span></button>
   </header>
   <main>
     <div class="kpis">
@@ -266,19 +379,12 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
 
     <div class="grid">
       <section class="painel painel--fazer">
-        <h2>📋 O que fazer agora <span class="cont">${totalHeroi}</span></h2>
-        <div class="sub">
-          <div class="sub-titulo">🔵 A Fazer <span class="sub-cont">${totalFazer}</span></div>
-          <div class="cards">
-            ${urgente.map((c) => renderCardFoco(c, true)).join('')}
-            ${fazer.map((c) => renderCardFoco(c)).join('')}
-            ${totalFazer === 0 ? '<p class="vazio">🎉 Nada pendente a fazer!</p>' : ''}
-          </div>
-          <div class="sub-titulo">💡 Ideias <span class="sub-cont">${ideias.length}</span></div>
-          <div class="cards">
-            ${ideias.map((c) => renderCardFoco(c)).join('')}
-            ${ideias.length === 0 ? '<p class="vazio">Sem ideias no backlog.</p>' : ''}
-          </div>
+        <h2>📋 O que fazer agora — por projeto <span class="cont">${totalFazer}</span></h2>
+        ${blocosFazerPorProjeto || '<p class="vazio">🎉 Nada pendente a fazer!</p>'}
+        <div class="proj-head" style="margin-top:24px">💡 <span class="proj-nome">Ideias</span><span class="sub-cont">${ideias.length}</span></div>
+        <div class="cards">
+          ${ideias.map((c) => renderCardFoco(c)).join('')}
+          ${ideias.length === 0 ? '<p class="vazio">Sem ideias no backlog.</p>' : ''}
         </div>
       </section>
 
@@ -293,6 +399,11 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
       ${blocoProducao}
     </div>
 
+    <div class="dois-paineis">
+      ${blocoProgresso}
+      ${blocoGrafico}
+    </div>
+
     <div class="secundaria">
       <h2>Concluído &amp; arquivado</h2>
       ${recolhivel('✅', 'Finalizados', finalizado)}
@@ -301,6 +412,25 @@ export function gerarDashboardHtml({ boards, porGrupo, todosCards, me }) {
     </div>
   </main>
   <footer>Gerado pelo agente Kiro · dados ao vivo do Trello · <a href="/orcamento">Orçamento de TI →</a></footer>
+  <script>
+    (function () {
+      const html = document.documentElement;
+      const btn = document.getElementById('toggleTema');
+      const icone = document.getElementById('temaIcone');
+      const texto = document.getElementById('temaTexto');
+      function aplicar(tema) {
+        html.setAttribute('data-tema', tema);
+        const escuro = tema === 'escuro';
+        icone.textContent = escuro ? '☀️' : '🌙';
+        texto.textContent = escuro ? 'Claro' : 'Escuro';
+        try { localStorage.setItem('tema', tema); } catch (e) {}
+      }
+      let salvo = 'claro';
+      try { salvo = localStorage.getItem('tema') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro'); } catch (e) {}
+      aplicar(salvo);
+      btn.addEventListener('click', () => aplicar(html.getAttribute('data-tema') === 'escuro' ? 'claro' : 'escuro'));
+    })();
+  </script>
 </body>
 </html>`;
 }

@@ -54,17 +54,45 @@ export function getLists(boardId) {
 
 export function getCards(boardId) {
   return trelloGet(`/boards/${boardId}/cards`, {
-    fields: 'name,due,dueComplete,idList,url,labels,dateLastActivity',
+    fields: 'name,due,dueComplete,idList,url,labels,dateLastActivity,idMembers',
     filter: 'open',
+  });
+}
+
+// Membros do board (para resolver os responsáveis dos cards).
+export function getMembers(boardId) {
+  return trelloGet(`/boards/${boardId}/members`, {
+    fields: 'fullName,username,initials',
   });
 }
 
 // Monta a estrutura completa de um board: listas + cards agrupados.
 export async function getBoardData(board) {
-  const [lists, cards] = await Promise.all([
+  const [lists, cards, members] = await Promise.all([
     getLists(board.id),
     getCards(board.id),
+    getMembers(board.id).catch(() => []),
   ]);
+
+  // Mapa de id -> dados do membro.
+  const membroById = new Map(
+    members.map((m) => [
+      m.id,
+      {
+        id: m.id,
+        nome: m.fullName || m.username,
+        iniciais: m.initials || (m.fullName || m.username || '?').slice(0, 2).toUpperCase(),
+      },
+    ])
+  );
+
+  // Anexa os responsáveis resolvidos a cada card.
+  for (const card of cards) {
+    card.membros = (card.idMembers || [])
+      .map((id) => membroById.get(id))
+      .filter(Boolean);
+  }
+
   const listsById = new Map(lists.map((l) => [l.id, { ...l, cards: [] }]));
   for (const card of cards) {
     const list = listsById.get(card.idList);
