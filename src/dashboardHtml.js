@@ -337,6 +337,12 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
 
   .proj-grupo { margin-bottom: 20px; }
   .proj-head { display: flex; align-items: center; gap: 9px; margin: 18px 0 11px; font-size: 14px; font-weight: 700; }
+  .proj-head--ideias { margin-top: 24px; }
+  #listaProjetos.flash .proj-grupo { animation: flashProj .6s ease; }
+  @keyframes flashProj {
+    0%   { background: rgba(37,99,235,.10); border-radius: 10px; }
+    100% { background: transparent; }
+  }
   .proj-nome { color: var(--ink); }
   .proj-grupo:first-child .proj-head { margin-top: 2px; }
   .sub-cont { background: var(--track); color: var(--muted); border-radius: 16px; padding: 1px 10px; font-size: 12px; }
@@ -450,8 +456,8 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
     <div class="grid">
       <section class="painel painel--fazer">
         <h2>📋 O que fazer agora — por projeto <span class="cont">${totalFazer}</span></h2>
-        ${blocosFazerPorProjeto || '<p class="vazio">🎉 Nada pendente a fazer!</p>'}
-        <div class="proj-head" style="margin-top:24px">💡 <span class="proj-nome">Ideias</span><span class="sub-cont">${ideias.length}</span></div>
+        <div id="listaProjetos">${blocosFazerPorProjeto || '<p class="vazio">🎉 Nada pendente a fazer!</p>'}</div>
+        <div class="proj-head proj-head--ideias">💡 <span class="proj-nome">Ideias</span><span class="sub-cont">${ideias.length}</span></div>
         <div class="cards">
           ${ideias.map((c) => renderCardFoco(c)).join('')}
           ${ideias.length === 0 ? '<p class="vazio">Sem ideias no backlog.</p>' : ''}
@@ -529,24 +535,38 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
     // Ordenar projetos no "A Fazer"
     (function () {
       const sel = document.getElementById('ordenarProj');
-      if (!sel) return;
-      const painel = document.querySelector('.painel--fazer');
-      sel.addEventListener('change', () => {
-        const grupos = [...painel.querySelectorAll('.proj-grupo')];
+      const lista = document.getElementById('listaProjetos');
+      if (!sel || !lista) return;
+
+      function ordenar() {
+        const grupos = [...lista.querySelectorAll(':scope > .proj-grupo')];
+        if (grupos.length === 0) return;
         const modo = sel.value;
         grupos.sort((a, b) => {
           const qa = +a.dataset.qtd, qb = +b.dataset.qtd;
           const aa = +a.dataset.atrasados, ab = +b.dataset.atrasados;
-          if (modo === 'qtd') return qb - qa;
-          if (modo === 'qtd-asc') return qa - qb;
-          if (modo === 'alfa') return a.dataset.board.localeCompare(b.dataset.board);
-          if (modo === 'atraso') return ab - aa || qb - qa;
+          if (modo === 'qtd') return (qb - qa) || a.dataset.board.localeCompare(b.dataset.board);
+          if (modo === 'qtd-asc') return (qa - qb) || a.dataset.board.localeCompare(b.dataset.board);
+          if (modo === 'alfa') return a.dataset.board.localeCompare(b.dataset.board, 'pt');
+          if (modo === 'atraso') return (ab - aa) || (qb - qa);
           return 0;
         });
-        // Reinsere na ordem (antes do bloco de Ideias).
-        const ancora = painel.querySelector('.proj-head[style]');
-        grupos.forEach((gp) => painel.insertBefore(gp, ancora));
-      });
+        // Reanexa na nova ordem dentro do próprio container.
+        grupos.forEach((gp) => lista.appendChild(gp));
+        // Feedback visual: pisca rapidamente os grupos reordenados.
+        lista.classList.remove('flash');
+        void lista.offsetWidth; // força reflow para reiniciar a animação
+        lista.classList.add('flash');
+        // Texto de feedback com a ordem atual.
+        const info = document.getElementById('ctrlInfo');
+        if (info) {
+          const label = sel.options[sel.selectedIndex].textContent;
+          const ordem = grupos.map((g) => g.dataset.board).join(' → ');
+          info.textContent = 'Ordenado: ' + label + ' (' + ordem + ')';
+        }
+      }
+
+      sel.addEventListener('change', ordenar);
     })();
 
     // Copiar resumo de atrasados
