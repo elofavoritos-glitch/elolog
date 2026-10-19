@@ -1,0 +1,11 @@
+node_modules/
+.env
+dist/
+*.log
+.vercel/
+
+# Dashboard gerado localmente pela CLI
+/dashboard.html
+
+# Kiro (configs locais do ambiente)
+.kiro/

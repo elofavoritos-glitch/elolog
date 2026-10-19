@@ -1,0 +1,16 @@
+{
+  "name": "trello-agente-dashboard",
+  "version": "1.0.0",
+  "description": "Integração com o Trello para gerenciar boards, verificar prazos e gerar dashboard HTML visual.",
+  "type": "module",
+  "scripts": {
+    "dashboard": "node src/dashboard.js",
+    "prazos": "node src/prazos.js",
+    "boards": "node src/listBoards.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
