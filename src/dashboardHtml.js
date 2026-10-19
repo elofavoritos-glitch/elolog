@@ -74,8 +74,11 @@ function renderCardFoco(c, destaqueUrgente = false) {
     ? '<span class="flag flag--urgente">URGENTE</span>' : '';
   const atrasado = c.status === STATUS.ATRASADO ? ' is-atrasado' : '';
   const nome = semTitulo(c) ? '<em class="sem-titulo">(sem título)</em>' : escapeHtml(c.name);
+  // IDs de membros para o filtro por responsável (client-side).
+  const idsMembros = (c.membros || []).map((m) => m.id).join(' ');
   return `
-    <a class="card${atrasado}" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">
+    <a class="card${atrasado}" href="${escapeHtml(c.url)}" target="_blank" rel="noopener"
+       data-membros="${escapeHtml(idsMembros)}">
       ${flag}${renderLabels(c.labels)}
       <span class="card-nome">${nome}</span>
       <span class="card-meta">
@@ -154,9 +157,34 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
     )
   );
 
+  // Responsáveis únicos (para o filtro por pessoa).
+  const membrosMap = new Map();
+  for (const c of todosCards || []) {
+    for (const m of c.membros || []) {
+      if (!membrosMap.has(m.id)) membrosMap.set(m.id, m);
+    }
+  }
+  const responsaveis = [...membrosMap.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+
+  // Texto do resumo de atrasados (pronto para copiar).
+  const resumoAtrasoTexto = atrasados.length
+    ? `⚠️ ${atrasados.length} tarefa(s) atrasada(s):\n\n` +
+      atrasados
+        .map((c) => {
+          const resp = (c.membros || []).map((m) => m.nome).join(', ');
+          const venc = c.due ? formatarData(c.due) : '—';
+          const dias = c.diasRestantes !== null ? ` (${Math.abs(c.diasRestantes)}d atrás)` : '';
+          return `• [${c.boardName}] ${c.name} — venceu ${venc}${dias}${resp ? ' · ' + resp : ''}`;
+        })
+        .join('\n')
+    : '✅ Nenhuma tarefa atrasada!';
+
   const blocoAtraso = atrasados.length
     ? `<section class="alerta">
-         <div class="alerta-head">⚠️ <strong>${atrasados.length}</strong> ${atrasados.length === 1 ? 'tarefa atrasada' : 'tarefas atrasadas'} — resolver primeiro</div>
+         <div class="alerta-head">
+           <span>⚠️ <strong>${atrasados.length}</strong> ${atrasados.length === 1 ? 'tarefa atrasada' : 'tarefas atrasadas'} — resolver primeiro</span>
+           <button class="btn-copiar" id="btnCopiarAtraso" data-resumo="${escapeHtml(resumoAtrasoTexto)}">📋 Copiar resumo</button>
+         </div>
          <div class="alerta-cards">${atrasados.map((c) => renderCardFoco(c)).join('')}</div>
        </section>`
     : '';
@@ -170,11 +198,14 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
   }
   const blocosFazerPorProjeto = [...porBoardFazer.entries()]
     .sort((a, b) => b[1].length - a[1].length)
-    .map(([board, cards]) => `
-      <div class="proj-grupo">
-        <div class="proj-head"><span class="proj-nome">${escapeHtml(board)}</span><span class="sub-cont">${cards.length}</span></div>
+    .map(([board, cards]) => {
+      const atrasadosBoard = cards.filter((c) => c.status === STATUS.ATRASADO).length;
+      return `
+      <div class="proj-grupo" data-board="${escapeHtml(board)}" data-qtd="${cards.length}" data-atrasados="${atrasadosBoard}">
+        <div class="proj-head"><span class="proj-nome">${escapeHtml(board)}</span><span class="sub-cont">${cards.length}</span>${atrasadosBoard ? `<span class="proj-atraso">${atrasadosBoard} atrasado(s)</span>` : ''}</div>
         <div class="cards">${cards.map((c) => renderCardFoco(c)).join('')}</div>
-      </div>`)
+      </div>`;
+    })
     .join('');
 
   // Barras de progresso por projeto (só boards com cards).
@@ -270,11 +301,29 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
                text-transform: uppercase; letter-spacing: .04em; }
   .kpi--hero .kpi-num { font-size: 40px; color: var(--cor); }
 
+  /* Controles (filtro + ordenação) */
+  .controles { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 24px;
+               background: var(--surface); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
+  .ctrl { display: flex; flex-direction: column; gap: 5px; }
+  .ctrl-label { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .ctrl select { background: var(--surface2); color: var(--ink); border: 1px solid var(--line);
+                 border-radius: 10px; padding: 9px 13px; font-size: 14px; font-weight: 600; cursor: pointer; min-width: 190px;
+                 font-family: inherit; }
+  .ctrl select:focus { outline: none; border-color: var(--azul); }
+  .ctrl-info { font-size: 13px; color: var(--muted); font-weight: 600; margin-left: auto; align-self: center; }
+
   .alerta { background: var(--surface); border: 1px solid #fcd4d4; border-left: 5px solid #ef4444;
             border-radius: var(--radius); padding: 18px 20px; margin-bottom: 28px; box-shadow: var(--shadow); }
   html[data-tema="escuro"] .alerta { border-color: #5b2626; }
-  .alerta-head { font-size: 15px; color: #ef4444; margin-bottom: 14px; }
+  .alerta-head { font-size: 15px; color: #ef4444; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   .alerta-head strong { font-size: 17px; }
+  .btn-copiar { background: #ef4444; color: #fff; border: none; border-radius: 9px; padding: 7px 13px;
+                font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .btn-copiar:hover { background: #dc2626; }
+  .btn-copiar.ok { background: #10b981; }
+  .proj-atraso { background: #fee2e2; color: #b42318; border-radius: 12px; padding: 1px 9px; font-size: 11px; font-weight: 700; }
+  html[data-tema="escuro"] .proj-atraso { background: #4a1d1d; color: #fca5a5; }
+  .card.oculto, .proj-grupo.oculto { display: none; }
   .alerta-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 10px; }
 
   .grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 20px; align-items: start; }
@@ -375,6 +424,27 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
       ${kpi(finalizado.length, 'Finalizados', '#10b981', '✅')}
     </div>
 
+    <div class="controles">
+      <label class="ctrl">
+        <span class="ctrl-label">👤 Responsável</span>
+        <select id="filtroResp">
+          <option value="">Todos</option>
+          <option value="__sem__">Sem responsável</option>
+          ${responsaveis.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.nome)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="ctrl">
+        <span class="ctrl-label">↕️ Ordenar projetos</span>
+        <select id="ordenarProj">
+          <option value="qtd">Mais cards primeiro</option>
+          <option value="qtd-asc">Menos cards primeiro</option>
+          <option value="alfa">Nome (A→Z)</option>
+          <option value="atraso">Mais atrasados primeiro</option>
+        </select>
+      </label>
+      <span class="ctrl-info" id="ctrlInfo"></span>
+    </div>
+
     ${blocoAtraso}
 
     <div class="grid">
@@ -429,6 +499,73 @@ export function gerarDashboardHtml({ boards, porGrupo, porBoard, todosCards, me 
       try { salvo = localStorage.getItem('tema') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro'); } catch (e) {}
       aplicar(salvo);
       btn.addEventListener('click', () => aplicar(html.getAttribute('data-tema') === 'escuro' ? 'claro' : 'escuro'));
+    })();
+
+    // Filtro por responsável
+    (function () {
+      const sel = document.getElementById('filtroResp');
+      const info = document.getElementById('ctrlInfo');
+      if (!sel) return;
+      sel.addEventListener('change', () => {
+        const v = sel.value;
+        let visiveis = 0;
+        document.querySelectorAll('.card').forEach((card) => {
+          const membros = (card.getAttribute('data-membros') || '').split(' ').filter(Boolean);
+          let mostra = true;
+          if (v === '__sem__') mostra = membros.length === 0;
+          else if (v) mostra = membros.includes(v);
+          card.classList.toggle('oculto', !mostra);
+          if (mostra) visiveis++;
+        });
+        // Esconde grupos de projeto que ficaram sem cards visíveis.
+        document.querySelectorAll('.proj-grupo').forEach((pg) => {
+          const algum = [...pg.querySelectorAll('.card')].some((c) => !c.classList.contains('oculto'));
+          pg.classList.toggle('oculto', !algum);
+        });
+        info.textContent = v ? visiveis + ' card(s) visível(is)' : '';
+      });
+    })();
+
+    // Ordenar projetos no "A Fazer"
+    (function () {
+      const sel = document.getElementById('ordenarProj');
+      if (!sel) return;
+      const painel = document.querySelector('.painel--fazer');
+      sel.addEventListener('change', () => {
+        const grupos = [...painel.querySelectorAll('.proj-grupo')];
+        const modo = sel.value;
+        grupos.sort((a, b) => {
+          const qa = +a.dataset.qtd, qb = +b.dataset.qtd;
+          const aa = +a.dataset.atrasados, ab = +b.dataset.atrasados;
+          if (modo === 'qtd') return qb - qa;
+          if (modo === 'qtd-asc') return qa - qb;
+          if (modo === 'alfa') return a.dataset.board.localeCompare(b.dataset.board);
+          if (modo === 'atraso') return ab - aa || qb - qa;
+          return 0;
+        });
+        // Reinsere na ordem (antes do bloco de Ideias).
+        const ancora = painel.querySelector('.proj-head[style]');
+        grupos.forEach((gp) => painel.insertBefore(gp, ancora));
+      });
+    })();
+
+    // Copiar resumo de atrasados
+    (function () {
+      const btn = document.getElementById('btnCopiarAtraso');
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const texto = btn.getAttribute('data-resumo') || '';
+        try {
+          await navigator.clipboard.writeText(texto);
+        } catch (e) {
+          const ta = document.createElement('textarea');
+          ta.value = texto; document.body.appendChild(ta); ta.select();
+          document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        const orig = btn.textContent;
+        btn.textContent = '✅ Copiado!'; btn.classList.add('ok');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
+      });
     })();
   </script>
 </body>
