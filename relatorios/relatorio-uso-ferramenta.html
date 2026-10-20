@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relatório de Uso da Ferramenta — ELO (2 Ambientes)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --elo-orange:#F7931E; --elo-blue:#2E3192; --ink:#1f2430; --muted:#6b7280;
+    --bg:#f4f6fb; --card:#ffffff; --border:#e6e9f0; --green:#22a06b; --red:#e05a5a;
+    --purple:#7b4fd1;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);padding:28px;}
+  .wrap{max-width:1160px;margin:0 auto;}
+  header.top{display:flex;align-items:center;justify-content:space-between;
+    background:linear-gradient(90deg,var(--elo-blue),#3b3fb8);color:#fff;border-radius:16px;
+    padding:22px 28px;margin-bottom:22px;box-shadow:0 6px 18px rgba(46,49,146,.18);}
+  header.top h1{font-size:22px;font-weight:700;}
+  header.top .sub{font-size:13px;opacity:.85;margin-top:4px;}
+  .logo-badge{background:var(--elo-orange);color:#fff;font-weight:800;font-size:20px;padding:10px 16px;border-radius:12px;letter-spacing:1px;}
+  .env-note{display:flex;align-items:center;gap:10px;background:#eef0ff;border:1px solid #d4d8ff;color:#3a3f8f;
+    border-radius:12px;padding:12px 18px;font-size:13px;font-weight:600;margin-bottom:26px;}
+  .env-note .dot{width:9px;height:9px;border-radius:50%;background:var(--elo-blue);}
+
+  .section{background:transparent;margin-bottom:34px;}
+  .sec-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+  .sec-badge{color:#fff;font-weight:800;font-size:13px;padding:6px 14px;border-radius:10px;}
+  .sec-badge.a{background:var(--elo-orange);}
+  .sec-badge.b{background:var(--purple);}
+  .sec-head h2{font-size:18px;}
+  .sec-head .pill{margin-left:auto;font-size:12px;color:var(--muted);background:#fff;border:1px solid var(--border);
+    padding:5px 12px;border-radius:20px;font-weight:600;}
+
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:0 2px 8px rgba(31,36,48,.04);}
+  .card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+  .card .value{font-size:30px;font-weight:800;margin-top:6px;color:var(--elo-blue);}
+  .card .value.orange{color:var(--elo-orange);}
+  .card .value.purple{color:var(--purple);}
+  .card .value.sm{font-size:19px;padding-top:8px;}
+  .card .hint{font-size:11px;color:var(--muted);margin-top:4px;}
+
+  .grid2{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;margin-bottom:18px;}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:0 2px 8px rgba(31,36,48,.04);}
+  .panel h3{font-size:14px;margin-bottom:12px;}
+  .chart-box{position:relative;height:280px;}
+  .chart-box.small{height:250px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:#fafbfe;}
+  .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+  .tag.high{background:#fdeede;color:#b85c00;}
+  .tag.low{background:#eafaf2;color:#157a4f;}
+  .tag.exp{background:#fdeaea;color:#b23b3b;}
+  .tag.fin{background:#eafaf2;color:#157a4f;}
+
+  .emp-strip{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;}
+  .emp-card{border-radius:14px;padding:20px;color:#fff;position:relative;overflow:hidden;}
+  .emp-card.high{background:linear-gradient(135deg,var(--elo-orange),#ffb259);}
+  .emp-card.low{background:linear-gradient(135deg,#6b7280,#9aa3b2);}
+  .emp-card.solo{background:linear-gradient(135deg,var(--purple),#a07be8);grid-column:1 / -1;}
+  .emp-card .name{font-size:17px;font-weight:800;}
+  .emp-card .mail{font-size:12px;opacity:.9;margin-top:2px;}
+  .emp-card .big{font-size:42px;font-weight:900;margin-top:8px;line-height:1;}
+  .emp-card .cap{font-size:12px;opacity:.95;}
+  .emp-card .pct{position:absolute;right:18px;top:18px;font-size:12px;font-weight:700;background:rgba(255,255,255,.22);padding:5px 12px;border-radius:20px;}
+
+  .insights{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:0 2px 8px rgba(31,36,48,.04);}
+  .insights h3{font-size:14px;margin-bottom:12px;}
+  .insight-item{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px dashed var(--border);}
+  .insight-item:last-child{border-bottom:none;}
+  .insight-item .ic{flex:0 0 30px;height:30px;width:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;background:#f0f2fa;}
+  .insight-item p{font-size:13.5px;line-height:1.5;}
+  .insight-item p b{color:var(--elo-blue);}
+
+  .divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:26px 0;}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Relatório de Uso da Ferramenta de Pesquisas</h1>
+      <div class="sub">Análise por ambiente · ELO Soluções Logísticas</div>
+    </div>
+    <div class="logo-badge">ELO</div>
+  </header>
+
+  <div class="env-note">
+    <span class="dot"></span>
+    Este relatório cobre <b>2 ambientes separados</b> e independentes. Cada ambiente possui seu próprio período de dados e por isso são analisados individualmente, sem comparação direta entre eles.
+  </div>
+
+  <!-- ================= AMBIENTE 1 ================= -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-badge a">AMBIENTE 1</span>
+      <h2>Eliane da Rosa &amp; equipe</h2>
+      <span class="pill">Período: 01/10/2026 – 20/10/2026 (último mês)</span>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="label">Total de solicitações</div><div class="value">18</div><div class="hint">no período</div></div>
+      <div class="card"><div class="label">Usuários ativos</div><div class="value orange">2</div><div class="hint">Eliane e Wendel</div></div>
+      <div class="card"><div class="label">Maior uso</div><div class="value sm">Eliane da Rosa</div><div class="hint">17 de 18 solicitações</div></div>
+      <div class="card"><div class="label">Concentração</div><div class="value orange">94,4%</div><div class="hint">em 1 usuário</div></div>
+    </div>
+
+    <div class="emp-strip">
+      <div class="emp-card high">
+        <div class="pct">94,4% do total</div>
+        <div class="name">Eliane da Rosa</div>
+        <div class="mail">eliane.p@elo.log.br</div>
+        <div class="big">17</div>
+        <div class="cap">solicitações — USO INTENSIVO</div>
+      </div>
+      <div class="emp-card low">
+        <div class="pct">5,6% do total</div>
+        <div class="name">Wendel Pestana</div>
+        <div class="mail">wendell.pestana@elo.log.br</div>
+        <div class="big">1</div>
+        <div class="cap">solicitação — USO PONTUAL</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel"><h3>Solicitações por funcionário</h3><div class="chart-box"><canvas id="bar1"></canvas></div></div>
+      <div class="panel"><h3>Distribuição do uso (%)</h3><div class="chart-box small"><canvas id="pie1"></canvas></div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px;">
+      <h3>Volume diário — Outubro/2026</h3>
+      <div class="chart-box"><canvas id="line1"></canvas></div>
+    </div>
+
+    <div class="grid2" style="grid-template-columns:1fr 1fr;">
+      <div class="panel">
+        <h3>Resumo do Ambiente 1</h3>
+        <table>
+          <thead><tr><th>Funcionário</th><th>Solicit.</th><th>%</th><th>Perfil</th></tr></thead>
+          <tbody>
+            <tr><td><b>Eliane da Rosa</b></td><td>17</td><td>94,4%</td><td><span class="tag high">Intensivo</span></td></tr>
+            <tr><td><b>Wendel Pestana</b></td><td>1</td><td>5,6%</td><td><span class="tag low">Pontual</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="insights">
+        <h3>Conclusões — Ambiente 1</h3>
+        <div class="insight-item"><div class="ic">⚠️</div><p><b>Uso concentrado:</b> 17 das 18 solicitações (94,4%) são da <b>Eliane</b>. A ferramenta é operada essencialmente por uma só pessoa.</p></div>
+        <div class="insight-item"><div class="ic">📉</div><p><b>Wendel</b> usou apenas <b>1 vez</b> (01/10/2026) — uso meramente pontual.</p></div>
+        <div class="insight-item"><div class="ic">📅</div><p>Pico em <b>20/10/2026</b>: 15 solicitações da Eliane em ~50 min (trabalho em lote).</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ================= AMBIENTE 2 ================= -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-badge b">AMBIENTE 2</span>
+      <h2>Mayara Toma</h2>
+      <span class="pill">Período: 09/2024 – 10/2024</span>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="label">Total de solicitações</div><div class="value purple">27</div><div class="hint">no período</div></div>
+      <div class="card"><div class="label">Usuários ativos</div><div class="value purple">1</div><div class="hint">apenas Mayara</div></div>
+      <div class="card"><div class="label">Finalizados (download)</div><div class="value sm" style="color:var(--green)">3</div><div class="hint">ainda disponíveis</div></div>
+      <div class="card"><div class="label">Expirados</div><div class="value sm" style="color:var(--red)">24</div><div class="hint">prazo encerrado</div></div>
+    </div>
+
+    <div class="emp-strip">
+      <div class="emp-card solo">
+        <div class="pct">100% do total</div>
+        <div class="name">Mayara Toma</div>
+        <div class="mail">mayara.t@elo.log.br</div>
+        <div class="big">27</div>
+        <div class="cap">solicitações — ÚNICA USUÁRIA DO AMBIENTE</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel"><h3>Situação das solicitações</h3><div class="chart-box"><canvas id="bar2"></canvas></div></div>
+      <div class="panel"><h3>Status (%)</h3><div class="chart-box small"><canvas id="pie2"></canvas></div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px;">
+      <h3>Volume mensal — 2024</h3>
+      <div class="chart-box"><canvas id="line2"></canvas></div>
+    </div>
+
+    <div class="grid2" style="grid-template-columns:1fr 1fr;">
+      <div class="panel">
+        <h3>Resumo do Ambiente 2</h3>
+        <table>
+          <thead><tr><th>Funcionário</th><th>Solicit.</th><th>Finalizados</th><th>Expirados</th></tr></thead>
+          <tbody>
+            <tr><td><b>Mayara Toma</b></td><td>27</td><td><span class="tag fin">3</span></td><td><span class="tag exp">24</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="insights">
+        <h3>Conclusões — Ambiente 2</h3>
+        <div class="insight-item"><div class="ic">👤</div><p><b>Uso 100% individual:</b> todas as 27 solicitações são da <b>Mayara Toma</b>. Nenhum outro funcionário usou este ambiente.</p></div>
+        <div class="insight-item"><div class="ic">⏳</div><p><b>24 de 27</b> solicitações já estão <b>expiradas</b> — apenas 3 seguem disponíveis para download.</p></div>
+        <div class="insight-item"><div class="ic">🗓️</div><p>Atividade concentrada entre <b>setembro e outubro de 2024</b>, sem uso recente.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Relatório de uso · ELO Soluções Logísticas · 2 ambientes analisados separadamente · Base: registros de solicitações exibidos em cada tela.
+  </footer>
+</div>
+
+<script>
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+Chart.defaults.color = '#6b7280';
+const ORANGE='#F7931E', BLUE='#2E3192', GREY='#9aa3b2', PURPLE='#7b4fd1', GREEN='#22a06b', RED='#e05a5a';
+
+/* ---- Ambiente 1 ---- */
+new Chart(document.getElementById('bar1'),{type:'bar',
+  data:{labels:['Eliane da Rosa','Wendel Pestana'],datasets:[{data:[17,1],backgroundColor:[ORANGE,GREY],borderRadius:8,barThickness:70}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:5},grid:{color:'#eef1f8'}},x:{grid:{display:false}}}}});
+
+new Chart(document.getElementById('pie1'),{type:'doughnut',
+  data:{labels:['Eliane (94,4%)','Wendel (5,6%)'],datasets:[{data:[17,1],backgroundColor:[ORANGE,GREY],borderWidth:2,borderColor:'#fff'}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{padding:14,usePointStyle:true}}}}});
+
+new Chart(document.getElementById('line1'),{type:'bar',
+  data:{labels:['01/10','09/10','20/10'],datasets:[
+    {label:'Eliane da Rosa',data:[0,2,15],backgroundColor:ORANGE,borderRadius:6,stack:'s'},
+    {label:'Wendel Pestana',data:[1,0,0],backgroundColor:GREY,borderRadius:6,stack:'s'}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:14}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{color:'#eef1f8'}}}}});
+
+/* ---- Ambiente 2 ---- */
+new Chart(document.getElementById('bar2'),{type:'bar',
+  data:{labels:['Finalizados','Expirados'],datasets:[{data:[3,24],backgroundColor:[GREEN,RED],borderRadius:8,barThickness:70}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:5},grid:{color:'#eef1f8'}},x:{grid:{display:false}}}}});
+
+new Chart(document.getElementById('pie2'),{type:'doughnut',
+  data:{labels:['Expirados (89%)','Finalizados (11%)'],datasets:[{data:[24,3],backgroundColor:[RED,GREEN],borderWidth:2,borderColor:'#fff'}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{padding:14,usePointStyle:true}}}}});
+
+new Chart(document.getElementById('line2'),{type:'bar',
+  data:{labels:['Set/2024','Out/2024'],datasets:[{label:'Mayara Toma',data:[19,8],backgroundColor:PURPLE,borderRadius:6}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:14}}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#eef1f8'}}}}});
+</script>
+</body>
+</html>
